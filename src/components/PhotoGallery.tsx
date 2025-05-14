@@ -1,8 +1,9 @@
+
 import React, { useState } from 'react';
 import { usePallet } from '@/contexts/PalletContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Download, Home, CheckCircle, Upload } from 'lucide-react';
+import { Download, Home, CheckCircle, Share2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface PhotoGalleryProps {
@@ -12,7 +13,7 @@ interface PhotoGalleryProps {
 const PhotoGallery: React.FC<PhotoGalleryProps> = ({ onRestart }) => {
   const { photos, totalPallets, customerName, poNumber } = usePallet();
   const { toast } = useToast();
-  const [isUploading, setIsUploading] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
 
   // Group photos by pallet
   const photosByPallet = photos.reduce((acc: Record<number, any[]>, photo) => {
@@ -57,43 +58,53 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ onRestart }) => {
     });
   };
 
-  const uploadToServer = async () => {
-    setIsUploading(true);
+  const sharePhotos = async () => {
+    setIsSharing(true);
     
     try {
-      // Simulate server upload with timeout
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Example of what would happen in a real implementation:
-      // 1. Convert photos to proper format (e.g., FormData)
-      // 2. Send to server via fetch/axios
-      // const formData = new FormData();
-      // photos.forEach((photo, index) => {
-      //   formData.append(`photo_${index}`, photo.photoUri);
-      // });
-      // formData.append('customerName', customerName);
-      // formData.append('poNumber', poNumber);
-      // formData.append('totalPallets', totalPallets.toString());
-      // await fetch('https://your-api-endpoint.com/upload', {
-      //   method: 'POST',
-      //   body: formData
-      // });
-      
-      toast({
-        title: "Upload Successful",
-        description: `${photos.length} photos for ${customerName} have been uploaded to the server.`,
-        duration: 5000
-      });
+      if (navigator.share) {
+        // Prepare files for sharing
+        const files: File[] = await Promise.all(
+          photos.map(async (photo) => {
+            const { palletIndex, sideIndex, photoUri } = photo;
+            const fileName = `${customerName.replace(/\s+/g, '_')}_${poNumber}_Pallet${palletIndex}_Side${sideIndex}.jpg`;
+            
+            // Convert data URI to Blob
+            const response = await fetch(photoUri);
+            const blob = await response.blob();
+            return new File([blob], fileName, { type: 'image/jpeg' });
+          })
+        );
+
+        await navigator.share({
+          title: `${customerName} - ${poNumber} Photos`,
+          files
+        });
+        
+        toast({
+          title: "Share Complete",
+          description: "Photos have been shared successfully.",
+          duration: 3000
+        });
+      } else {
+        // Fallback for browsers that don't support the Web Share API
+        toast({
+          title: "Sharing Not Available",
+          description: "Your browser doesn't support the sharing functionality. Please use the download option instead.",
+          variant: "destructive",
+          duration: 5000
+        });
+      }
     } catch (error) {
+      console.error("Sharing error:", error);
       toast({
-        title: "Upload Failed",
-        description: "There was an error uploading photos. Please try again.",
+        title: "Sharing Failed",
+        description: "There was an error sharing the photos. Please try again or use the download option.",
         variant: "destructive",
         duration: 5000
       });
-      console.error("Upload error:", error);
     } finally {
-      setIsUploading(false);
+      setIsSharing(false);
     }
   };
 
@@ -116,12 +127,12 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ onRestart }) => {
             Download All Photos
           </Button>
           <Button 
-            onClick={uploadToServer}
+            onClick={sharePhotos}
             className="bg-blue-600 hover:bg-blue-700"
-            disabled={isUploading}
+            disabled={isSharing}
           >
-            <Upload className="mr-2 h-5 w-5" />
-            {isUploading ? "Uploading..." : "Upload to Server"}
+            <Share2 className="mr-2 h-5 w-5" />
+            {isSharing ? "Sharing..." : "Share Photos"}
           </Button>
           <Button 
             onClick={onRestart} 
