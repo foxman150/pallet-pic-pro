@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { CameraIcon, CheckIcon, RefreshCw } from 'lucide-react';
 import { usePallet } from '@/contexts/PalletContext';
@@ -78,10 +78,15 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
   const confirmPhoto = () => {
     if (photoUri) {
       onPhotoTaken(photoUri);
+      // Reset the state and automatically start the camera for the next photo
+      setPhotoTaken(false);
+      setPhotoUri('');
+      // We'll start the camera in useEffect that watches photoTaken
     }
   };
 
-  React.useEffect(() => {
+  // Initial camera start
+  useEffect(() => {
     startCamera();
     
     return () => {
@@ -91,6 +96,13 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
       }
     };
   }, []);
+
+  // Auto-start camera when photo is confirmed and we reset photoTaken to false
+  useEffect(() => {
+    if (!photoTaken && photoUri === '') {
+      startCamera();
+    }
+  }, [photoTaken, photoUri]);
 
   return (
     <div className="flex flex-col items-center justify-center w-full">
