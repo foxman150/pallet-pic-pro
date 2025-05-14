@@ -1,9 +1,8 @@
-
-import React from 'react';
+import React, { useState } from 'react';
 import { usePallet } from '@/contexts/PalletContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Download, Home, CheckCircle } from 'lucide-react';
+import { Download, Home, CheckCircle, Upload } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface PhotoGalleryProps {
@@ -13,6 +12,7 @@ interface PhotoGalleryProps {
 const PhotoGallery: React.FC<PhotoGalleryProps> = ({ onRestart }) => {
   const { photos, totalPallets, customerName, poNumber } = usePallet();
   const { toast } = useToast();
+  const [isUploading, setIsUploading] = useState(false);
 
   // Group photos by pallet
   const photosByPallet = photos.reduce((acc: Record<number, any[]>, photo) => {
@@ -57,6 +57,46 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ onRestart }) => {
     });
   };
 
+  const uploadToServer = async () => {
+    setIsUploading(true);
+    
+    try {
+      // Simulate server upload with timeout
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Example of what would happen in a real implementation:
+      // 1. Convert photos to proper format (e.g., FormData)
+      // 2. Send to server via fetch/axios
+      // const formData = new FormData();
+      // photos.forEach((photo, index) => {
+      //   formData.append(`photo_${index}`, photo.photoUri);
+      // });
+      // formData.append('customerName', customerName);
+      // formData.append('poNumber', poNumber);
+      // formData.append('totalPallets', totalPallets.toString());
+      // await fetch('https://your-api-endpoint.com/upload', {
+      //   method: 'POST',
+      //   body: formData
+      // });
+      
+      toast({
+        title: "Upload Successful",
+        description: `${photos.length} photos for ${customerName} have been uploaded to the server.`,
+        duration: 5000
+      });
+    } catch (error) {
+      toast({
+        title: "Upload Failed",
+        description: "There was an error uploading photos. Please try again.",
+        variant: "destructive",
+        duration: 5000
+      });
+      console.error("Upload error:", error);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex flex-col items-center mb-8">
@@ -67,13 +107,21 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ onRestart }) => {
         <p className="text-gray-600 mb-4 text-center">
           All {photos.length} photos of {totalPallets} pallet(s) have been captured for {customerName} (PO: {poNumber})
         </p>
-        <div className="flex gap-4">
+        <div className="flex flex-wrap gap-4 justify-center">
           <Button 
             onClick={downloadAllPhotos}
             className="bg-pallet-primary hover:bg-pallet-accent"
           >
             <Download className="mr-2 h-5 w-5" />
             Download All Photos
+          </Button>
+          <Button 
+            onClick={uploadToServer}
+            className="bg-blue-600 hover:bg-blue-700"
+            disabled={isUploading}
+          >
+            <Upload className="mr-2 h-5 w-5" />
+            {isUploading ? "Uploading..." : "Upload to Server"}
           </Button>
           <Button 
             onClick={onRestart} 
