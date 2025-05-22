@@ -1,17 +1,20 @@
+
 import React, { useState } from 'react';
 import PalletCountSelector from './PalletCountSelector';
 import CustomerInfoForm from './CustomerInfoForm';
 import CameraView from './CameraView';
 import PhotoGallery from './PhotoGallery';
+import HistoryView from './HistoryView';
 import { usePallet } from '@/contexts/PalletContext';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 enum AppStage {
   COUNT_SELECTION,
   CUSTOMER_INFO,
   PHOTO_CAPTURE,
-  GALLERY
+  GALLERY,
+  HISTORY
 }
 
 const PalletApp: React.FC = () => {
@@ -62,6 +65,8 @@ const PalletApp: React.FC = () => {
         // Otherwise, just go back one side
         setCurrentSide(currentSide - 1);
       }
+    } else if (stage === AppStage.HISTORY) {
+      setStage(AppStage.COUNT_SELECTION);
     }
   };
 
@@ -80,6 +85,8 @@ const PalletApp: React.FC = () => {
         return <CameraView onPhotoTaken={handlePhotoTaken} />;
       case AppStage.GALLERY:
         return <PhotoGallery onRestart={handleRestart} />;
+      case AppStage.HISTORY:
+        return <HistoryView onBack={() => setStage(AppStage.COUNT_SELECTION)} />;
       default:
         return <PalletCountSelector onContinue={() => setStage(AppStage.CUSTOMER_INFO)} />;
     }
@@ -88,7 +95,8 @@ const PalletApp: React.FC = () => {
   // Determine if we should show the back button
   const showBackButton = stage === AppStage.CUSTOMER_INFO || 
                         (stage === AppStage.PHOTO_CAPTURE && 
-                        !(currentPallet === 1 && currentSide === 1));
+                        !(currentPallet === 1 && currentSide === 1)) ||
+                        stage === AppStage.HISTORY;
 
   return (
     <div className="min-h-screen p-4 relative">
@@ -98,16 +106,29 @@ const PalletApp: React.FC = () => {
           <h1 className="text-2xl font-bold text-pallet-primary">Pallet Documenter</h1>
         </div>
         
-        {showBackButton && (
-          <Button 
-            variant="outline" 
-            onClick={handleBack}
-            className="border-pallet-primary text-pallet-primary hover:bg-pallet-secondary"
-          >
-            <ArrowLeft className="mr-2 h-5 w-5" />
-            Back
-          </Button>
-        )}
+        <div className="flex gap-2">
+          {stage === AppStage.COUNT_SELECTION && (
+            <Button
+              variant="outline"
+              onClick={() => setStage(AppStage.HISTORY)}
+              className="border-pallet-primary text-pallet-primary hover:bg-pallet-secondary"
+            >
+              <History className="mr-2 h-5 w-5" />
+              History
+            </Button>
+          )}
+          
+          {showBackButton && (
+            <Button 
+              variant="outline" 
+              onClick={handleBack}
+              className="border-pallet-primary text-pallet-primary hover:bg-pallet-secondary"
+            >
+              <ArrowLeft className="mr-2 h-5 w-5" />
+              Back
+            </Button>
+          )}
+        </div>
       </div>
       
       {/* Main Content */}

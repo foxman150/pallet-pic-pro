@@ -8,6 +8,15 @@ interface PalletPhoto {
   photoUri: string;
 }
 
+interface PalletSession {
+  id: string;
+  customerName: string;
+  poNumber: string;
+  totalPallets: number;
+  photos: PalletPhoto[];
+  timestamp: number;
+}
+
 interface PalletContextType {
   totalPallets: number;
   setTotalPallets: (count: number) => void;
@@ -28,6 +37,9 @@ interface PalletContextType {
   fetchHistorySessions: () => Promise<any[]>;
   fetchSessionPhotos: (sessionId: string) => Promise<any[]>;
   deviceId: string;
+  saveSessionToLocalStorage: () => void;
+  localSessions: PalletSession[];
+  deleteLocalSession: (sessionId: string) => void;
 }
 
 const PalletContext = createContext<PalletContextType | undefined>(undefined);
@@ -42,6 +54,12 @@ const getDeviceId = (): string => {
   return deviceId;
 };
 
+// Local storage key for sessions
+const LOCAL_SESSIONS_KEY = 'pallet_local_sessions';
+
+// One week in milliseconds
+const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
 export function PalletProvider({ children }: { children: React.ReactNode }) {
   const [totalPallets, setTotalPallets] = useState<number>(0);
   const [photos, setPhotos] = useState<PalletPhoto[]>([]);
@@ -52,6 +70,7 @@ export function PalletProvider({ children }: { children: React.ReactNode }) {
   const [supabase, setSupabase] = useState<any>(null);
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [deviceId] = useState<string>(getDeviceId());
+  const [localSessions, setLocalSessions] = useState<PalletSession[]>([]);
 
   // Initialize Supabase client
   useEffect(() => {
@@ -72,6 +91,43 @@ export function PalletProvider({ children }: { children: React.ReactNode }) {
     
     initSupabase();
   }, []);
+  
+  // Load local sessions from storage
+  useEffect(() => {
+    loadLocalSessions();
+  }, []);
+  
+  // Clean up expired sessions (older than one week)
+  useEffect(() => {
+    const cleanupExpiredSessions = () => {
+      const now = Date.now();
+      const filteredSessions = localSessions.filter(
+        session => now - session.timestamp < ONE_WEEK_MS
+      );
+      
+      if (filteredSessions.length !== localSessions.length) {
+        setLocalSessions(filteredSessions);
+        localStorage.setItem(LOCAL_SESSIONS_KEY, JSON.stringify(filteredSessions));
+      }
+    };
+    
+    cleanupExpiredSessions();
+    // Run cleanup daily
+    const intervalId = setInterval(cleanupExpiredSessions, 24 * 60 * 60 * 1000);
+    
+    return () => clearInterval(intervalId);
+  }, [localSessions]);
+
+  const loadLocalSessions = () => {
+    try {
+      const savedSessions = localStorage.getItem(LOCAL_SESSIONS_KEY);
+      if (savedSessions) {
+        setLocalSessions(JSON.parse(savedSessions));
+      }
+    } catch (error) {
+      console.error('Error loading local sessions:', error);
+    }
+  };
 
   const addPhoto = (palletIndex: number, sideIndex: number, photoUri: string) => {
     // Remove any existing photo with same pallet and side
@@ -93,6 +149,40 @@ export function PalletProvider({ children }: { children: React.ReactNode }) {
     setPoNumber('');
     setCurrentPallet(1);
     setCurrentSide(1);
+  };
+  
+  // Save current session to local storage
+  const saveSessionToLocalStorage = () => {
+    if (photos.length === 0 || !customerName || !poNumber) {
+      return false;
+    }
+    
+    const newSession: PalletSession = {
+      id: uuidv4(),
+      customerName,
+      poNumber,
+      totalPallets,
+      photos: [...photos],
+      timestamp: Date.now()
+    };
+    
+    const updatedSessions = [newSession, ...localSessions];
+    setLocalSessions(updatedSessions);
+    
+    try {
+      localStorage.setItem(LOCAL_SESSIONS_KEY, JSON.stringify(updatedSessions));
+      return true;
+    } catch (error) {
+      console.error('Error saving to local storage:', error);
+      return false;
+    }
+  };
+  
+  // Delete a local session by ID
+  const deleteLocalSession = (sessionId: string) => {
+    const updatedSessions = localSessions.filter(session => session.id !== sessionId);
+    setLocalSessions(updatedSessions);
+    localStorage.setItem(LOCAL_SESSIONS_KEY, JSON.stringify(updatedSessions));
   };
   
   // Upload photos to Supabase
@@ -241,7 +331,10 @@ export function PalletProvider({ children }: { children: React.ReactNode }) {
         uploadPhotosToSupabase,
         fetchHistorySessions,
         fetchSessionPhotos,
-        deviceId
+        deviceId,
+        saveSessionToLocalStorage,
+        localSessions,
+        deleteLocalSession
       }}
     >
       {children}
