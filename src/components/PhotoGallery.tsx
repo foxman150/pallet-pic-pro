@@ -3,15 +3,17 @@ import React, { useState } from 'react';
 import { usePallet } from '@/contexts/PalletContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Download, Home, CheckCircle, Share2 } from 'lucide-react';
+import { Download, Home, CheckCircle, Share2, History, Upload } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { Link } from 'react-router-dom';
+import { Progress } from '@/components/ui/progress';
 
 interface PhotoGalleryProps {
   onRestart: () => void;
 }
 
 const PhotoGallery: React.FC<PhotoGalleryProps> = ({ onRestart }) => {
-  const { photos, totalPallets, customerName, poNumber } = usePallet();
+  const { photos, totalPallets, customerName, poNumber, uploadPhotosToSupabase, isUploading } = usePallet();
   const { toast } = useToast();
   const [isSharing, setIsSharing] = useState(false);
 
@@ -56,6 +58,25 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ onRestart }) => {
       description: `${photos.length} photos will be saved to your downloads folder.`,
       duration: 5000
     });
+  };
+
+  const handleUploadToSupabase = async () => {
+    const success = await uploadPhotosToSupabase();
+    
+    if (success) {
+      toast({
+        title: "Upload Successful",
+        description: `All photos have been saved to your history. You can access them from the History page.`,
+        duration: 5000
+      });
+    } else {
+      toast({
+        title: "Upload Failed",
+        description: "There was an error saving your photos to history. Please try again.",
+        variant: "destructive",
+        duration: 5000
+      });
+    }
   };
 
   const sharePhotos = async () => {
@@ -127,6 +148,14 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ onRestart }) => {
             Download All Photos
           </Button>
           <Button 
+            onClick={handleUploadToSupabase}
+            className="bg-purple-600 hover:bg-purple-700"
+            disabled={isUploading}
+          >
+            <Upload className="mr-2 h-5 w-5" />
+            {isUploading ? "Saving..." : "Save to History"}
+          </Button>
+          <Button 
             onClick={sharePhotos}
             className="bg-blue-600 hover:bg-blue-700"
             disabled={isSharing}
@@ -142,7 +171,23 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ onRestart }) => {
             <Home className="mr-2 h-5 w-5" />
             Start New Session
           </Button>
+          <Link to="/history">
+            <Button 
+              variant="outline"
+              className="border-purple-600 text-purple-600 hover:bg-purple-50"
+            >
+              <History className="mr-2 h-5 w-5" />
+              View History
+            </Button>
+          </Link>
         </div>
+        
+        {isUploading && (
+          <div className="w-full max-w-md mt-6">
+            <p className="text-sm text-gray-500 mb-2">Saving photos to history...</p>
+            <Progress value={100} className="h-2" />
+          </div>
+        )}
       </div>
 
       <div className="space-y-8">
