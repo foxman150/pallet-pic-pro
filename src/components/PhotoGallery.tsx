@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Download, Home, CheckCircle, Share2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { generateSecureFilename, secureError } from '@/lib/security';
 
 interface PhotoGalleryProps {
   onRestart: () => void;
@@ -25,23 +26,32 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ onRestart }) => {
   }, {});
 
   const handleDownload = (photo: any) => {
-    const { palletIndex, sideIndex, photoUri } = photo;
-    const wrapStatusText = wrapStatus.charAt(0).toUpperCase() + wrapStatus.slice(1);
-    const fileName = `${customerName.replace(/\s+/g, '_')}_${poNumber}_${wrapStatusText}_Pallet${palletIndex}_Side${sideIndex}.jpg`;
-    
-    // Create an anchor element and set the href to the photo URI
-    const link = document.createElement('a');
-    link.href = photoUri;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    toast({
-      title: "Photo Saved",
-      description: `${fileName} has been saved to your downloads folder.`,
-      duration: 3000
-    });
+    try {
+      const { palletIndex, sideIndex, photoUri } = photo;
+      const fileName = generateSecureFilename(customerName, poNumber, wrapStatus, palletIndex, sideIndex);
+      
+      // Create an anchor element and set the href to the photo URI
+      const link = document.createElement('a');
+      link.href = photoUri;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast({
+        title: "Photo Saved",
+        description: `${fileName} has been saved to your downloads folder.`,
+        duration: 3000
+      });
+    } catch (error) {
+      secureError('Error downloading photo', error);
+      toast({
+        title: "Download Failed",
+        description: "There was an error downloading the photo. Please try again.",
+        variant: "destructive",
+        duration: 3000
+      });
+    }
   };
 
   const downloadAllPhotos = () => {
@@ -67,8 +77,7 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ onRestart }) => {
         const files: File[] = await Promise.all(
           photos.map(async (photo) => {
             const { palletIndex, sideIndex, photoUri } = photo;
-            const wrapStatusText = wrapStatus.charAt(0).toUpperCase() + wrapStatus.slice(1);
-            const fileName = `${customerName.replace(/\s+/g, '_')}_${poNumber}_${wrapStatusText}_Pallet${palletIndex}_Side${sideIndex}.jpg`;
+            const fileName = generateSecureFilename(customerName, poNumber, wrapStatus, palletIndex, sideIndex);
             
             // Convert data URI to Blob
             const response = await fetch(photoUri);
@@ -97,7 +106,7 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ onRestart }) => {
         });
       }
     } catch (error) {
-      console.error("Sharing error:", error);
+      secureError('Sharing error', error);
       toast({
         title: "Sharing Failed",
         description: "There was an error sharing the photos. Please try again or use the download option.",
@@ -123,7 +132,7 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ onRestart }) => {
           });
         }
       } catch (error) {
-        console.error('Error auto-saving session:', error);
+        secureError('Error auto-saving session', error);
       }
     };
 

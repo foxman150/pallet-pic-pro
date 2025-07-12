@@ -6,6 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { ArrowLeft, Trash2, Download } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
+import { generateSecureFilename, secureError } from '@/lib/security';
 
 interface HistoryViewProps {
   onBack: () => void;
@@ -22,22 +23,32 @@ const HistoryView: React.FC<HistoryViewProps> = ({ onBack }) => {
 
   // Handle download of a photo
   const handleDownload = (photo: any, customerName: string, poNumber: string, wrapStatus?: string) => {
-    const { palletIndex, sideIndex, photoUri } = photo;
-    const wrapStatusText = wrapStatus ? `_${wrapStatus.charAt(0).toUpperCase() + wrapStatus.slice(1)}` : '';
-    const fileName = `${customerName.replace(/\s+/g, '_')}_${poNumber}${wrapStatusText}_Pallet${palletIndex}_Side${sideIndex}.jpg`;
-    
-    const link = document.createElement('a');
-    link.href = photoUri;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    toast({
-      title: "Photo Saved",
-      description: `${fileName} has been saved to your downloads folder.`,
-      duration: 3000
-    });
+    try {
+      const { palletIndex, sideIndex, photoUri } = photo;
+      const status = wrapStatus || 'unwrapped';
+      const fileName = generateSecureFilename(customerName, poNumber, status, palletIndex, sideIndex);
+      
+      const link = document.createElement('a');
+      link.href = photoUri;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast({
+        title: "Photo Saved",
+        description: `${fileName} has been saved to your downloads folder.`,
+        duration: 3000
+      });
+    } catch (error) {
+      secureError('Error downloading photo from history', error);
+      toast({
+        title: "Download Failed",
+        description: "There was an error downloading the photo. Please try again.",
+        variant: "destructive",
+        duration: 3000
+      });
+    }
   };
 
   // Handle deleting a session

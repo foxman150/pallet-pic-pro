@@ -1,6 +1,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
+import { secureSetItem, secureGetItem, secureError, getUserFriendlyError } from '@/lib/security';
 
 interface PalletPhoto {
   palletIndex: number;
@@ -124,29 +125,25 @@ export function PalletProvider({ children }: { children: React.ReactNode }) {
 
   const loadLocalSessions = () => {
     try {
-      const savedSessions = localStorage.getItem(LOCAL_SESSIONS_KEY);
-      if (savedSessions) {
-        const parsed = JSON.parse(savedSessions);
-        // Validate that parsed data is an array of valid sessions
-        if (Array.isArray(parsed) && parsed.every(session => 
-          session.id && session.customerName && session.poNumber && 
-          session.totalPallets && Array.isArray(session.photos) && 
+      const sessions = secureGetItem(LOCAL_SESSIONS_KEY);
+      if (Array.isArray(sessions)) {
+        // Validate session data structure
+        const validSessions = sessions.filter(session => 
+          session && 
+          typeof session.id === 'string' && 
+          typeof session.customerName === 'string' &&
+          typeof session.poNumber === 'string' &&
+          typeof session.totalPallets === 'number' &&
+          Array.isArray(session.photos) &&
           typeof session.timestamp === 'number'
-        )) {
-          // Add default wrapStatus for older sessions that don't have it
-          const updatedSessions = parsed.map(session => ({
-            ...session,
-            wrapStatus: session.wrapStatus || 'unwrapped'
-          }));
-          setLocalSessions(updatedSessions);
-        } else {
-          console.warn('Invalid session data found, clearing storage');
-          localStorage.removeItem(LOCAL_SESSIONS_KEY);
-        }
+        ).map(session => ({
+          ...session,
+          wrapStatus: session.wrapStatus || 'unwrapped'
+        }));
+        setLocalSessions(validSessions);
       }
     } catch (error) {
-      console.error('Error loading local sessions:', error);
-      localStorage.removeItem(LOCAL_SESSIONS_KEY);
+      secureError('Error loading local sessions', error);
     }
   };
 
@@ -193,19 +190,23 @@ export function PalletProvider({ children }: { children: React.ReactNode }) {
     setLocalSessions(updatedSessions);
     
     try {
-      localStorage.setItem(LOCAL_SESSIONS_KEY, JSON.stringify(updatedSessions));
+      secureSetItem(LOCAL_SESSIONS_KEY, updatedSessions);
       return true;
     } catch (error) {
-      console.error('Error saving to local storage:', error);
+      secureError('Error saving to local storage', error);
       return false;
     }
   };
   
   // Delete a local session by ID
   const deleteLocalSession = (sessionId: string) => {
-    const updatedSessions = localSessions.filter(session => session.id !== sessionId);
-    setLocalSessions(updatedSessions);
-    localStorage.setItem(LOCAL_SESSIONS_KEY, JSON.stringify(updatedSessions));
+    try {
+      const updatedSessions = localSessions.filter(session => session.id !== sessionId);
+      setLocalSessions(updatedSessions);
+      secureSetItem(LOCAL_SESSIONS_KEY, updatedSessions);
+    } catch (error) {
+      secureError('Error deleting local session', error);
+    }
   };
   
   // Upload photos to Supabase
@@ -230,7 +231,7 @@ export function PalletProvider({ children }: { children: React.ReactNode }) {
         .single();
       
       if (sessionError || !sessionData) {
-        console.error('Error creating session:', sessionError);
+        secureError('Error creating session', sessionError);
         return false;
       }
       
@@ -253,7 +254,7 @@ export function PalletProvider({ children }: { children: React.ReactNode }) {
           });
         
         if (uploadError) {
-          console.error('Error uploading photo:', uploadError);
+          secureError('Error uploading photo', uploadError);
           continue;
         }
         
@@ -273,13 +274,13 @@ export function PalletProvider({ children }: { children: React.ReactNode }) {
           });
         
         if (photoError) {
-          console.error('Error creating photo record:', photoError);
+          secureError('Error creating photo record', photoError);
         }
       }
       
       return true;
     } catch (error) {
-      console.error('Error in upload process:', error);
+      secureError('Error in upload process', error);
       return false;
     } finally {
       setIsUploading(false);

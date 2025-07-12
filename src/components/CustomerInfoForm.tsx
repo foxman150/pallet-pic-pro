@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { usePallet } from '@/contexts/PalletContext';
 import { UserIcon, ClipboardIcon, ArrowRightIcon, Package } from 'lucide-react';
+import { validateCustomerName, validatePoNumber, sanitizeInput } from '@/lib/security';
 
 interface CustomerInfoFormProps {
   onContinue: () => void;
@@ -16,25 +17,27 @@ const CustomerInfoForm: React.FC<CustomerInfoFormProps> = ({ onContinue }) => {
   const [errors, setErrors] = useState({ name: '', poNumber: '' });
 
   const validate = (): boolean => {
-    let valid = true;
     const newErrors = { name: '', poNumber: '' };
 
-    if (!customerName.trim()) {
-      newErrors.name = 'Customer name is required';
-      valid = false;
+    const nameValidation = validateCustomerName(customerName);
+    if (!nameValidation.isValid) {
+      newErrors.name = nameValidation.error || 'Invalid customer name';
     }
 
-    if (!poNumber.trim()) {
-      newErrors.poNumber = 'PO Number is required';
-      valid = false;
+    const poValidation = validatePoNumber(poNumber);
+    if (!poValidation.isValid) {
+      newErrors.poNumber = poValidation.error || 'Invalid PO number';
     }
 
     setErrors(newErrors);
-    return valid;
+    return nameValidation.isValid && poValidation.isValid;
   };
 
   const handleContinue = () => {
     if (validate()) {
+      // Sanitize inputs before proceeding
+      setCustomerName(sanitizeInput(customerName));
+      setPoNumber(sanitizeInput(poNumber));
       onContinue();
     }
   };
