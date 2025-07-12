@@ -10,7 +10,7 @@ interface PhotoGalleryProps {
 }
 
 const PhotoGallery: React.FC<PhotoGalleryProps> = ({ onRestart }) => {
-  const { photos, totalPallets, customerName, poNumber, saveSessionToLocalStorage } = usePallet();
+  const { photos, totalPallets, customerName, poNumber, wrapStatus, saveSessionToLocalStorage } = usePallet();
   const { toast } = useToast();
   const [isSharing, setIsSharing] = useState(false);
 
@@ -26,7 +26,8 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ onRestart }) => {
 
   const handleDownload = (photo: any) => {
     const { palletIndex, sideIndex, photoUri } = photo;
-    const fileName = `${customerName.replace(/\s+/g, '_')}_${poNumber}_Pallet${palletIndex}_Side${sideIndex}.jpg`;
+    const wrapStatusText = wrapStatus.charAt(0).toUpperCase() + wrapStatus.slice(1);
+    const fileName = `${customerName.replace(/\s+/g, '_')}_${poNumber}_${wrapStatusText}_Pallet${palletIndex}_Side${sideIndex}.jpg`;
     
     // Create an anchor element and set the href to the photo URI
     const link = document.createElement('a');
@@ -66,7 +67,8 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ onRestart }) => {
         const files: File[] = await Promise.all(
           photos.map(async (photo) => {
             const { palletIndex, sideIndex, photoUri } = photo;
-            const fileName = `${customerName.replace(/\s+/g, '_')}_${poNumber}_Pallet${palletIndex}_Side${sideIndex}.jpg`;
+            const wrapStatusText = wrapStatus.charAt(0).toUpperCase() + wrapStatus.slice(1);
+            const fileName = `${customerName.replace(/\s+/g, '_')}_${poNumber}_${wrapStatusText}_Pallet${palletIndex}_Side${sideIndex}.jpg`;
             
             // Convert data URI to Blob
             const response = await fetch(photoUri);
@@ -139,7 +141,7 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ onRestart }) => {
         </div>
         <h1 className="text-2xl font-bold mb-2">Documentation Complete!</h1>
         <p className="text-gray-600 mb-4 text-center">
-          All {photos.length} photos of {totalPallets} pallet(s) have been captured for {customerName} (PO: {poNumber})
+          All {photos.length} photos of {totalPallets} pallet(s) have been captured for {customerName} (PO: {poNumber}) - {wrapStatus.charAt(0).toUpperCase() + wrapStatus.slice(1)}
         </p>
         <div className="flex flex-wrap gap-4 justify-center">
           <Button 

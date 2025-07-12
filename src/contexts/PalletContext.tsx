@@ -12,6 +12,7 @@ interface PalletSession {
   id: string;
   customerName: string;
   poNumber: string;
+  wrapStatus: 'unwrapped' | 'wrapped';
   totalPallets: number;
   photos: PalletPhoto[];
   timestamp: number;
@@ -26,6 +27,8 @@ interface PalletContextType {
   setCustomerName: (name: string) => void;
   poNumber: string;
   setPoNumber: (po: string) => void;
+  wrapStatus: 'unwrapped' | 'wrapped';
+  setWrapStatus: (status: 'unwrapped' | 'wrapped') => void;
   currentPallet: number;
   setCurrentPallet: (index: number) => void;
   currentSide: number;
@@ -65,6 +68,7 @@ export function PalletProvider({ children }: { children: React.ReactNode }) {
   const [photos, setPhotos] = useState<PalletPhoto[]>([]);
   const [customerName, setCustomerName] = useState<string>('');
   const [poNumber, setPoNumber] = useState<string>('');
+  const [wrapStatus, setWrapStatus] = useState<'unwrapped' | 'wrapped'>('unwrapped');
   const [currentPallet, setCurrentPallet] = useState<number>(1);
   const [currentSide, setCurrentSide] = useState<number>(1);
   const [supabase, setSupabase] = useState<any>(null);
@@ -129,7 +133,12 @@ export function PalletProvider({ children }: { children: React.ReactNode }) {
           session.totalPallets && Array.isArray(session.photos) && 
           typeof session.timestamp === 'number'
         )) {
-          setLocalSessions(parsed);
+          // Add default wrapStatus for older sessions that don't have it
+          const updatedSessions = parsed.map(session => ({
+            ...session,
+            wrapStatus: session.wrapStatus || 'unwrapped'
+          }));
+          setLocalSessions(updatedSessions);
         } else {
           console.warn('Invalid session data found, clearing storage');
           localStorage.removeItem(LOCAL_SESSIONS_KEY);
@@ -159,6 +168,7 @@ export function PalletProvider({ children }: { children: React.ReactNode }) {
     setPhotos([]);
     setCustomerName('');
     setPoNumber('');
+    setWrapStatus('unwrapped');
     setCurrentPallet(1);
     setCurrentSide(1);
   };
@@ -173,6 +183,7 @@ export function PalletProvider({ children }: { children: React.ReactNode }) {
       id: uuidv4(),
       customerName,
       poNumber,
+      wrapStatus,
       totalPallets,
       photos: [...photos],
       timestamp: Date.now()
@@ -333,6 +344,8 @@ export function PalletProvider({ children }: { children: React.ReactNode }) {
         setCustomerName,
         poNumber,
         setPoNumber,
+        wrapStatus,
+        setWrapStatus,
         currentPallet,
         setCurrentPallet,
         currentSide,

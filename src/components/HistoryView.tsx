@@ -21,9 +21,10 @@ const HistoryView: React.FC<HistoryViewProps> = ({ onBack }) => {
   };
 
   // Handle download of a photo
-  const handleDownload = (photo: any, customerName: string, poNumber: string) => {
+  const handleDownload = (photo: any, customerName: string, poNumber: string, wrapStatus?: string) => {
     const { palletIndex, sideIndex, photoUri } = photo;
-    const fileName = `${customerName.replace(/\s+/g, '_')}_${poNumber}_Pallet${palletIndex}_Side${sideIndex}.jpg`;
+    const wrapStatusText = wrapStatus ? `_${wrapStatus.charAt(0).toUpperCase() + wrapStatus.slice(1)}` : '';
+    const fileName = `${customerName.replace(/\s+/g, '_')}_${poNumber}${wrapStatusText}_Pallet${palletIndex}_Side${sideIndex}.jpg`;
     
     const link = document.createElement('a');
     link.href = photoUri;
@@ -79,6 +80,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ onBack }) => {
                   <div>
                     <h2 className="text-xl font-semibold">{session.customerName}</h2>
                     <p className="text-sm text-gray-500">PO: {session.poNumber}</p>
+                    <p className="text-sm text-gray-500">Status: {session.wrapStatus ? session.wrapStatus.charAt(0).toUpperCase() + session.wrapStatus.slice(1) : 'Unwrapped'}</p>
                     <p className="text-xs text-gray-400">{formatDate(session.timestamp)}</p>
                   </div>
                   <Button 
@@ -107,7 +109,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ onBack }) => {
                           size="sm"
                           variant="ghost"
                           className="text-white bg-transparent hover:bg-white/20"
-                          onClick={() => handleDownload(photo, session.customerName, session.poNumber)}
+                          onClick={() => handleDownload(photo, session.customerName, session.poNumber, session.wrapStatus)}
                         >
                           <Download className="h-5 w-5" />
                         </Button>
