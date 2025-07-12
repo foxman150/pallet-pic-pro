@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { usePallet } from '@/contexts/PalletContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Download, Home, CheckCircle, Share2, Save } from 'lucide-react';
+import { Download, Home, CheckCircle, Share2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface PhotoGalleryProps {
@@ -13,7 +13,6 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ onRestart }) => {
   const { photos, totalPallets, customerName, poNumber, saveSessionToLocalStorage } = usePallet();
   const { toast } = useToast();
   const [isSharing, setIsSharing] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
 
   // Group photos by pallet
   const photosByPallet = photos.reduce((acc: Record<number, any[]>, photo) => {
@@ -108,38 +107,29 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ onRestart }) => {
     }
   };
 
-  const handleSaveLocal = () => {
-    setIsSaving(true);
-    
-    try {
-      const result = saveSessionToLocalStorage();
-      
-      if (result) {
-        toast({
-          title: "Saved to History",
-          description: "This session has been saved to your local history for one week.",
-          duration: 4000
-        });
-      } else {
-        toast({
-          title: "Save Failed",
-          description: "Unable to save the session to history. Please try again.",
-          variant: "destructive",
-          duration: 4000
-        });
+  // Automatically save to history when gallery loads
+  useEffect(() => {
+    const autoSave = async () => {
+      try {
+        const result = saveSessionToLocalStorage();
+        
+        if (result) {
+          toast({
+            title: "Session Saved",
+            description: "This session has been automatically saved to your history for one week.",
+            duration: 3000
+          });
+        }
+      } catch (error) {
+        console.error('Error auto-saving session:', error);
       }
-    } catch (error) {
-      console.error('Error saving session:', error);
-      toast({
-        title: "Save Failed",
-        description: "An error occurred while saving to history.",
-        variant: "destructive",
-        duration: 4000
-      });
-    } finally {
-      setIsSaving(false);
+    };
+
+    // Only auto-save if we have photos and customer info
+    if (photos.length > 0 && customerName && poNumber) {
+      autoSave();
     }
-  };
+  }, []); // Run once when component mounts
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -166,14 +156,6 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ onRestart }) => {
           >
             <Share2 className="mr-2 h-5 w-5" />
             {isSharing ? "Sharing..." : "Share Photos"}
-          </Button>
-          <Button 
-            onClick={handleSaveLocal}
-            className="bg-amber-600 hover:bg-amber-700"
-            disabled={isSaving}
-          >
-            <Save className="mr-2 h-5 w-5" />
-            {isSaving ? "Saving..." : "Save to History"}
           </Button>
           <Button 
             onClick={onRestart} 
