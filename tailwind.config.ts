@@ -64,10 +64,10 @@ export default {
 					ring: 'hsl(var(--sidebar-ring))'
 				},
 				pallet: {
-					primary: '#0066CC',
-					secondary: '#E6F0FA',
-					accent: '#003366',
-					light: '#F5F9FF'
+					primary: 'hsl(210 100% 40%)',
+					secondary: 'hsl(210 67% 94%)', 
+					accent: 'hsl(210 100% 20%)',
+					light: 'hsl(210 100% 98%)'
 				}
 			},
 			borderRadius: {

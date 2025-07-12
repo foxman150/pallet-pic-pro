@@ -36,8 +36,9 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
       console.error("Error accessing camera:", err);
       toast({
         title: "Camera Error",
-        description: "Unable to access camera. Please check permissions.",
-        variant: "destructive"
+        description: "Unable to access camera. Please check permissions and try again, or use a device with camera support.",
+        variant: "destructive",
+        duration: 6000
       });
     }
   };

@@ -37,7 +37,7 @@ interface PalletContextType {
   fetchHistorySessions: () => Promise<any[]>;
   fetchSessionPhotos: (sessionId: string) => Promise<any[]>;
   deviceId: string;
-  saveSessionToLocalStorage: () => void;
+  saveSessionToLocalStorage: () => boolean;
   localSessions: PalletSession[];
   deleteLocalSession: (sessionId: string) => void;
 }
@@ -112,20 +112,32 @@ export function PalletProvider({ children }: { children: React.ReactNode }) {
     };
     
     cleanupExpiredSessions();
-    // Run cleanup daily
+    // Run cleanup daily - only set interval once, not dependent on localSessions
     const intervalId = setInterval(cleanupExpiredSessions, 24 * 60 * 60 * 1000);
     
     return () => clearInterval(intervalId);
-  }, [localSessions]);
+  }, []); // Remove localSessions dependency to prevent multiple intervals
 
   const loadLocalSessions = () => {
     try {
       const savedSessions = localStorage.getItem(LOCAL_SESSIONS_KEY);
       if (savedSessions) {
-        setLocalSessions(JSON.parse(savedSessions));
+        const parsed = JSON.parse(savedSessions);
+        // Validate that parsed data is an array of valid sessions
+        if (Array.isArray(parsed) && parsed.every(session => 
+          session.id && session.customerName && session.poNumber && 
+          session.totalPallets && Array.isArray(session.photos) && 
+          typeof session.timestamp === 'number'
+        )) {
+          setLocalSessions(parsed);
+        } else {
+          console.warn('Invalid session data found, clearing storage');
+          localStorage.removeItem(LOCAL_SESSIONS_KEY);
+        }
       }
     } catch (error) {
       console.error('Error loading local sessions:', error);
+      localStorage.removeItem(LOCAL_SESSIONS_KEY);
     }
   };
 
