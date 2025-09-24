@@ -1,9 +1,10 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { CameraIcon, CheckIcon, RefreshCw } from 'lucide-react';
+import { CameraIcon, CheckIcon, RefreshCw, ZoomIn } from 'lucide-react';
 import { usePallet } from '@/contexts/PalletContext';
 import { useToast } from '@/hooks/use-toast';
+import { useIsMobile, useDeviceOrientation } from '@/hooks/use-mobile';
 
 interface CameraViewProps {
   onPhotoTaken: (uri: string) => void;
@@ -12,27 +13,45 @@ interface CameraViewProps {
 const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
   const [photoTaken, setPhotoTaken] = useState<boolean>(false);
   const [photoUri, setPhotoUri] = useState<string>('');
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const { currentPallet, totalPallets, currentSide } = usePallet();
   const { toast } = useToast();
+  const isMobile = useIsMobile();
+  const orientation = useDeviceOrientation();
 
   const startCamera = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { 
+      setIsLoading(true);
+      
+      // Mobile-optimized camera constraints
+      const constraints = {
+        video: {
           facingMode: 'environment',
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        } 
-      });
+          width: isMobile 
+            ? { ideal: orientation === 'portrait' ? 720 : 1280, max: 1920 }
+            : { ideal: 1280, max: 1920 },
+          height: isMobile 
+            ? { ideal: orientation === 'portrait' ? 1280 : 720, max: 1920 }
+            : { ideal: 720, max: 1080 },
+        }
+      };
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
       
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         streamRef.current = stream;
+        
+        // Wait for video to load metadata before hiding loading
+        videoRef.current.onloadedmetadata = () => {
+          setIsLoading(false);
+        };
       }
     } catch (err) {
+      setIsLoading(false);
       console.error("Error accessing camera:", err);
       toast({
         title: "Camera Error",
@@ -57,8 +76,9 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
       if (ctx) {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         
-        // Convert canvas to data URL
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+        // Convert canvas to data URL with mobile optimization
+        const quality = isMobile ? 0.7 : 0.8; // Lower quality for mobile to save bandwidth
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
         setPhotoUri(dataUrl);
         setPhotoTaken(true);
         
@@ -106,22 +126,36 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
   }, [photoTaken, photoUri]);
 
   return (
-    <div className="flex flex-col items-center justify-center w-full">
-      <div className="text-center mb-4">
-        <h2 className="text-xl font-semibold">
+    <div className="flex flex-col items-center justify-center w-full px-4 sm:px-6 pb-safe-bottom">
+      {/* Header - Optimized for mobile */}
+      <div className="text-center mb-3 sm:mb-4">
+        <h2 className="text-lg sm:text-xl font-semibold">
           Pallet {currentPallet} of {totalPallets} - Side {currentSide}
         </h2>
-        <p className="text-sm text-muted-foreground">
-          Position camera to capture the full side of the pallet
+        <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+          {isMobile ? "Tap to capture" : "Position camera to capture the full side of the pallet"}
         </p>
       </div>
       
-      <div className="relative w-full max-w-3xl aspect-video bg-black rounded-lg overflow-hidden border-4 border-pallet-primary">
+      {/* Camera Container - Mobile optimized */}
+      <div className="relative w-full max-w-3xl aspect-video bg-black rounded-lg overflow-hidden border-2 sm:border-4 border-pallet-primary">
+        {isLoading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
+            <div className="text-white text-center">
+              <div className="animate-pulse-light mb-2">
+                <CameraIcon className="h-8 w-8 mx-auto" />
+              </div>
+              <p className="text-sm">Loading camera...</p>
+            </div>
+          </div>
+        )}
+        
         {!photoTaken ? (
           <video 
             ref={videoRef}
             autoPlay 
             playsInline
+            muted
             className="absolute inset-0 w-full h-full object-cover"
           />
         ) : (
@@ -131,40 +165,57 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
             className="absolute inset-0 w-full h-full object-contain"
           />
         )}
+        
+        {/* Mobile hint overlay */}
+        {isMobile && !photoTaken && !isLoading && (
+          <div className="absolute bottom-4 left-4 right-4 text-center">
+            <p className="text-white text-xs bg-black/50 rounded px-2 py-1">
+              {orientation === 'portrait' ? 'Rotate for wider view' : 'Ready to capture'}
+            </p>
+          </div>
+        )}
+        
         <canvas ref={canvasRef} className="hidden" />
       </div>
 
-      <div className="flex justify-center gap-4 mt-6">
+      {/* Controls - Mobile optimized */}
+      <div className="flex justify-center gap-3 sm:gap-4 mt-4 sm:mt-6 w-full max-w-md">
         {!photoTaken ? (
           <Button 
             onClick={takePhoto} 
-            size="lg"
-            className="bg-pallet-primary hover:bg-pallet-accent text-white rounded-full w-16 h-16 flex items-center justify-center"
+            disabled={isLoading}
+            className="bg-pallet-primary hover:bg-pallet-accent text-white rounded-full min-h-touch min-w-touch flex items-center justify-center shadow-lg active:scale-95 transition-transform"
+            style={{ width: '80px', height: '80px' }}
           >
-            <CameraIcon className="h-8 w-8" />
+            <CameraIcon className={`${isMobile ? 'h-10 w-10' : 'h-8 w-8'}`} />
           </Button>
         ) : (
           <>
             <Button 
               onClick={retakePhoto} 
               variant="outline"
-              size="lg" 
-              className="bg-white text-pallet-primary border-pallet-primary hover:bg-pallet-secondary"
+              className="bg-white text-pallet-primary border-pallet-primary hover:bg-pallet-secondary min-h-touch px-4 sm:px-6 active:scale-95 transition-transform"
             >
-              <RefreshCw className="mr-2 h-5 w-5" />
-              Retake
+              <RefreshCw className="mr-1 sm:mr-2 h-4 sm:h-5 w-4 sm:w-5" />
+              <span className="text-sm sm:text-base">Retake</span>
             </Button>
             <Button 
               onClick={confirmPhoto} 
-              size="lg" 
-              className="bg-pallet-primary hover:bg-pallet-accent"
+              className="bg-pallet-primary hover:bg-pallet-accent min-h-touch px-4 sm:px-6 active:scale-95 transition-transform"
             >
-              <CheckIcon className="mr-2 h-5 w-5" />
-              Confirm
+              <CheckIcon className="mr-1 sm:mr-2 h-4 sm:h-5 w-4 sm:w-5" />
+              <span className="text-sm sm:text-base">Confirm</span>
             </Button>
           </>
         )}
       </div>
+
+      {/* Touch hint for mobile */}
+      {isMobile && !photoTaken && !isLoading && (
+        <div className="mt-3 animate-bounce-subtle">
+          <p className="text-xs text-muted-foreground">Tap the camera button to capture</p>
+        </div>
+      )}
     </div>
   );
 };
