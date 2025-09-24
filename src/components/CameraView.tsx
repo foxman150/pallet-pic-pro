@@ -26,17 +26,14 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
     try {
       setIsLoading(true);
       
-      // Mobile-optimized camera constraints with enhanced landscape support
+      // Maximum quality camera constraints
       const constraints = {
         video: {
           facingMode: 'environment',
-          width: isMobile 
-            ? { ideal: orientation === 'portrait' ? 720 : 1280, max: 1920 }
-            : { ideal: 1280, max: 1920 },
-          height: isMobile 
-            ? { ideal: orientation === 'portrait' ? 1280 : 720, max: 1920 }
-            : { ideal: 720, max: 1080 },
-          aspectRatio: orientation === 'landscape' ? 16/9 : 4/3
+          width: { ideal: 1920, max: 4096 },
+          height: { ideal: 1080, max: 2160 },
+          aspectRatio: orientation === 'landscape' ? 16/9 : 4/3,
+          frameRate: { ideal: 30, max: 60 }
         }
       };
 
@@ -91,9 +88,8 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
       if (ctx) {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         
-        // Convert canvas to data URL with mobile optimization
-        const quality = isMobile ? 0.7 : 0.8; // Lower quality for mobile to save bandwidth
-        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        // Convert canvas to data URL with maximum quality
+        const dataUrl = canvas.toDataURL('image/jpeg', 1.0); // Maximum quality
         setPhotoUri(dataUrl);
         setPhotoTaken(true);
         
