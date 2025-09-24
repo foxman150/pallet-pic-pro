@@ -5,6 +5,8 @@ import { CameraIcon, CheckIcon, RefreshCw, ZoomIn } from 'lucide-react';
 import { usePallet } from '@/contexts/PalletContext';
 import { useToast } from '@/hooks/use-toast';
 import { useIsMobile, useDeviceOrientation } from '@/hooks/use-mobile';
+import { Capacitor } from '@capacitor/core';
+import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 
 interface CameraViewProps {
   onPhotoTaken: (uri: string) => void;
@@ -68,33 +70,92 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
     }
   };
 
-  const takePhoto = () => {
+  // Helper to convert Blob to Data URL for consistent handling
+  const blobToDataUrl = (blob: Blob): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+
+  const takePhoto = async () => {
     // Hide keyboard before taking photo
     hideKeyboard();
     
-    if (videoRef.current && canvasRef.current) {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      
-      // Set canvas dimensions to match video
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      
-      // Draw video frame to canvas
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        
-        // Convert canvas to data URL with maximum quality
-        const dataUrl = canvas.toDataURL('image/jpeg', 1.0); // Maximum quality
-        setPhotoUri(dataUrl);
-        setPhotoTaken(true);
-        
-        // Stop camera stream
-        if (streamRef.current) {
-          streamRef.current.getTracks().forEach(track => track.stop());
+    try {
+      // Prefer native camera on Capacitor for true full-resolution stills
+      const platform = Capacitor.getPlatform();
+      if (platform !== 'web') {
+        const photo = await Camera.getPhoto({
+          source: CameraSource.Camera,
+          resultType: CameraResultType.DataUrl,
+          quality: 100,
+          correctOrientation: true,
+          saveToGallery: false,
+        });
+        if (photo?.dataUrl) {
+          setPhotoUri(photo.dataUrl);
+          setPhotoTaken(true);
+          // Stop camera stream if active
+          if (streamRef.current) {
+            streamRef.current.getTracks().forEach((t) => t.stop());
+          }
+          return;
         }
       }
+
+      // Browser: try ImageCapture API for higher-resolution still images
+      const track = streamRef.current?.getVideoTracks?.()[0];
+      // @ts-ignore - ImageCapture may not be in lib.dom in some TS configs
+      const ImageCaptureCtor = (window as any).ImageCapture;
+      if (track && ImageCaptureCtor) {
+        try {
+          const imageCapture = new ImageCaptureCtor(track);
+          const blob: Blob = await imageCapture.takePhoto();
+          const dataUrl = await blobToDataUrl(blob);
+          setPhotoUri(dataUrl);
+          setPhotoTaken(true);
+          track.stop();
+          return;
+        } catch (e) {
+          console.warn('ImageCapture failed, falling back to canvas.', e);
+        }
+      }
+
+      // Fallback: capture from the video element into canvas
+      if (videoRef.current && canvasRef.current) {
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        
+        // Set canvas dimensions to match video
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        
+        // Draw video frame to canvas
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          
+          // Convert canvas to data URL at max quality
+          const dataUrl = canvas.toDataURL('image/jpeg', 1.0);
+          setPhotoUri(dataUrl);
+          setPhotoTaken(true);
+          
+          // Stop camera stream
+          if (streamRef.current) {
+            streamRef.current.getTracks().forEach(track => track.stop());
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error taking photo:', err);
+      toast({
+        title: 'Capture Error',
+        description: 'Failed to capture a high-resolution photo. Please try again.',
+        variant: 'destructive',
+        duration: 6000,
+      });
     }
   };
 
