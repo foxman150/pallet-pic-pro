@@ -141,23 +141,19 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
   }, [photoTaken, photoUri]);
 
   return (
-    <div className="flex flex-col items-center justify-center w-full px-4 sm:px-6 pb-safe-bottom">
-      {/* Header - Optimized for mobile */}
-      <div className="text-center mb-3 sm:mb-4">
-        <h2 className="text-lg sm:text-xl font-semibold">
+    <div className="flex flex-col h-screen w-full px-2 sm:px-4 py-2 overflow-hidden">
+      {/* Header - Compact */}
+      <div className="text-center mb-2 flex-shrink-0">
+        <h2 className="text-base sm:text-lg font-semibold">
           Pallet {currentPallet} of {totalPallets} - Side {currentSide}
         </h2>
-        <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+        <p className="text-xs text-muted-foreground">
           {isMobile ? "Tap to capture" : "Position camera to capture the full side of the pallet"}
         </p>
       </div>
       
-      {/* Camera Container - Enhanced landscape support */}
-      <div className={`relative w-full max-w-3xl bg-black rounded-lg overflow-hidden border-2 sm:border-4 border-pallet-primary ${
-        orientation === 'landscape' && isMobile 
-          ? 'aspect-video max-h-[60vh]' 
-          : 'aspect-video'
-      }`}>
+      {/* Camera Container - Flexible height to fill available space */}
+      <div className="relative flex-1 w-full mx-auto max-w-3xl bg-black rounded-lg overflow-hidden border-2 sm:border-4 border-pallet-primary min-h-0">
         {isLoading && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
             <div className="text-white text-center">
@@ -187,11 +183,7 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
         
         {/* Enhanced mobile hint overlay with landscape guidance */}
         {isMobile && !photoTaken && !isLoading && (
-          <div className={`absolute text-center ${
-            orientation === 'landscape' 
-              ? 'bottom-2 left-2 right-2' 
-              : 'bottom-4 left-4 right-4'
-          }`}>
+          <div className="absolute bottom-2 left-2 right-2 text-center">
             <p className="text-white text-xs bg-black/50 rounded px-2 py-1">
               {orientation === 'portrait' 
                 ? 'Rotate to landscape for optimal capture' 
@@ -204,12 +196,8 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
         <canvas ref={canvasRef} className="hidden" />
       </div>
 
-      {/* Controls - Enhanced for landscape mode */}
-      <div className={`flex justify-center gap-3 sm:gap-4 w-full max-w-md ${
-        orientation === 'landscape' && isMobile 
-          ? 'mt-2 sm:mt-4' 
-          : 'mt-4 sm:mt-6'
-      }`}>
+      {/* Controls - Fixed at bottom */}
+      <div className="flex justify-center gap-3 sm:gap-4 mt-2 flex-shrink-0">
         {!photoTaken ? (
           <Button 
             onClick={takePhoto} 
@@ -239,13 +227,6 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
           </>
         )}
       </div>
-
-      {/* Touch hint for mobile */}
-      {isMobile && !photoTaken && !isLoading && (
-        <div className="mt-3 animate-bounce-subtle">
-          <p className="text-xs text-muted-foreground">Tap the camera button to capture</p>
-        </div>
-      )}
     </div>
   );
 };
