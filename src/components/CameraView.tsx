@@ -26,14 +26,11 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
     try {
       setIsLoading(true);
       
-      // Maximum quality camera constraints
+      // Use maximum native camera resolution - no constraints
       const constraints = {
         video: {
-          facingMode: 'environment',
-          width: { ideal: 1920, max: 4096 },
-          height: { ideal: 1080, max: 2160 },
-          aspectRatio: orientation === 'landscape' ? 16/9 : 4/3,
-          frameRate: { ideal: 30, max: 60 }
+          facingMode: 'environment'
+          // No width/height/aspectRatio constraints to allow native max resolution
         }
       };
 
