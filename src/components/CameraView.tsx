@@ -26,7 +26,7 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
     try {
       setIsLoading(true);
       
-      // Mobile-optimized camera constraints
+      // Mobile-optimized camera constraints with enhanced landscape support
       const constraints = {
         video: {
           facingMode: 'environment',
@@ -36,6 +36,7 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
           height: isMobile 
             ? { ideal: orientation === 'portrait' ? 1280 : 720, max: 1920 }
             : { ideal: 720, max: 1080 },
+          aspectRatio: orientation === 'landscape' ? 16/9 : 4/3
         }
       };
 
@@ -62,7 +63,21 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
     }
   };
 
+  const hideKeyboard = () => {
+    // Hide keyboard on mobile devices
+    if (document.activeElement && 'blur' in document.activeElement) {
+      (document.activeElement as HTMLElement).blur();
+    }
+    // Additional method for iOS
+    if (window.scrollTo) {
+      window.scrollTo(0, 0);
+    }
+  };
+
   const takePhoto = () => {
+    // Hide keyboard before taking photo
+    hideKeyboard();
+    
     if (videoRef.current && canvasRef.current) {
       const video = videoRef.current;
       const canvas = canvasRef.current;
@@ -137,8 +152,12 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
         </p>
       </div>
       
-      {/* Camera Container - Mobile optimized */}
-      <div className="relative w-full max-w-3xl aspect-video bg-black rounded-lg overflow-hidden border-2 sm:border-4 border-pallet-primary">
+      {/* Camera Container - Enhanced landscape support */}
+      <div className={`relative w-full max-w-3xl bg-black rounded-lg overflow-hidden border-2 sm:border-4 border-pallet-primary ${
+        orientation === 'landscape' && isMobile 
+          ? 'aspect-video max-h-[60vh]' 
+          : 'aspect-video'
+      }`}>
         {isLoading && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
             <div className="text-white text-center">
@@ -166,11 +185,18 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
           />
         )}
         
-        {/* Mobile hint overlay */}
+        {/* Enhanced mobile hint overlay with landscape guidance */}
         {isMobile && !photoTaken && !isLoading && (
-          <div className="absolute bottom-4 left-4 right-4 text-center">
+          <div className={`absolute text-center ${
+            orientation === 'landscape' 
+              ? 'bottom-2 left-2 right-2' 
+              : 'bottom-4 left-4 right-4'
+          }`}>
             <p className="text-white text-xs bg-black/50 rounded px-2 py-1">
-              {orientation === 'portrait' ? 'Rotate for wider view' : 'Ready to capture'}
+              {orientation === 'portrait' 
+                ? 'Rotate to landscape for optimal capture' 
+                : 'Perfect! Ready to capture in landscape'
+              }
             </p>
           </div>
         )}
@@ -178,8 +204,12 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
         <canvas ref={canvasRef} className="hidden" />
       </div>
 
-      {/* Controls - Mobile optimized */}
-      <div className="flex justify-center gap-3 sm:gap-4 mt-4 sm:mt-6 w-full max-w-md">
+      {/* Controls - Enhanced for landscape mode */}
+      <div className={`flex justify-center gap-3 sm:gap-4 w-full max-w-md ${
+        orientation === 'landscape' && isMobile 
+          ? 'mt-2 sm:mt-4' 
+          : 'mt-4 sm:mt-6'
+      }`}>
         {!photoTaken ? (
           <Button 
             onClick={takePhoto} 
