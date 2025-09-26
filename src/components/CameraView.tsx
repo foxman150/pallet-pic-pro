@@ -5,8 +5,6 @@ import { CameraIcon, CheckIcon, RefreshCw, ZoomIn } from 'lucide-react';
 import { usePallet } from '@/contexts/PalletContext';
 import { useToast } from '@/hooks/use-toast';
 import { useIsMobile, useDeviceOrientation } from '@/hooks/use-mobile';
-import { Capacitor } from '@capacitor/core';
-import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 
 interface CameraViewProps {
   onPhotoTaken: (uri: string) => void;
@@ -84,42 +82,34 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
     hideKeyboard();
     
     try {
-      // Prefer native camera on Capacitor for true full-resolution stills
-      const platform = Capacitor.getPlatform();
-      if (platform !== 'web') {
-        const photo = await Camera.getPhoto({
-          source: CameraSource.Camera,
-          resultType: CameraResultType.DataUrl,
-          quality: 100,
-          correctOrientation: true,
-          saveToGallery: false,
-        });
-        if (photo?.dataUrl) {
-          setPhotoUri(photo.dataUrl);
-          setPhotoTaken(true);
-          // Stop camera stream if active
-          if (streamRef.current) {
-            streamRef.current.getTracks().forEach((t) => t.stop());
-          }
-          return;
-        }
-      }
-
-      // Browser: try ImageCapture API for higher-resolution still images
-      const track = streamRef.current?.getVideoTracks?.()[0];
-      // @ts-ignore - ImageCapture may not be in lib.dom in some TS configs
-      const ImageCaptureCtor = (window as any).ImageCapture;
-      if (track && ImageCaptureCtor) {
+      // Use MediaStream Image Capture API for highest quality photos
+      const track = streamRef.current?.getVideoTracks?.[0];
+      
+      if (track && 'ImageCapture' in window) {
         try {
-          const imageCapture = new ImageCaptureCtor(track);
-          const blob: Blob = await imageCapture.takePhoto();
+          const imageCapture = new (window as any).ImageCapture(track);
+          
+          // Get the photo capabilities to use maximum resolution
+          const capabilities = await imageCapture.getPhotoCapabilities();
+          const settings: any = {};
+          
+          // Use maximum resolution if available
+          if (capabilities.imageWidth?.max) {
+            settings.imageWidth = capabilities.imageWidth.max;
+          }
+          if (capabilities.imageHeight?.max) {
+            settings.imageHeight = capabilities.imageHeight.max;
+          }
+          
+          // Take photo with maximum quality settings
+          const blob: Blob = await imageCapture.takePhoto(settings);
           const dataUrl = await blobToDataUrl(blob);
           setPhotoUri(dataUrl);
           setPhotoTaken(true);
           track.stop();
           return;
         } catch (e) {
-          console.warn('ImageCapture failed, falling back to canvas.', e);
+          console.warn('ImageCapture API failed, falling back to canvas capture:', e);
         }
       }
 
@@ -128,7 +118,7 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
         const video = videoRef.current;
         const canvas = canvasRef.current;
         
-        // Set canvas dimensions to match video
+        // Set canvas dimensions to match video's natural resolution
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         
@@ -137,7 +127,7 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
         if (ctx) {
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           
-          // Convert canvas to data URL at max quality
+          // Convert canvas to data URL at maximum quality
           const dataUrl = canvas.toDataURL('image/jpeg', 1.0);
           setPhotoUri(dataUrl);
           setPhotoTaken(true);
@@ -152,7 +142,7 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
       console.error('Error taking photo:', err);
       toast({
         title: 'Capture Error',
-        description: 'Failed to capture a high-resolution photo. Please try again.',
+        description: 'Failed to capture photo using Media API. Please try again.',
         variant: 'destructive',
         duration: 6000,
       });
