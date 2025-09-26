@@ -14,6 +14,10 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
   const [photoTaken, setPhotoTaken] = useState<boolean>(false);
   const [photoUri, setPhotoUri] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [photoResolution, setPhotoResolution] = useState<string>('');
+  const [captureMethod, setCaptureMethod] = useState<string>('');
+  const [photoFormat, setPhotoFormat] = useState<string>('JPEG');
+  const [photoSize, setPhotoSize] = useState<number>(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -25,16 +29,41 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
   const startCamera = async () => {
     try {
       setIsLoading(true);
+      console.log('🎥 Starting camera with maximum quality settings...');
       
-      // Use maximum native camera resolution - no constraints
+      // Request maximum native camera resolution and quality
       const constraints = {
         video: {
-          facingMode: 'environment'
-          // No width/height/aspectRatio constraints to allow native max resolution
+          facingMode: 'environment',
+          // Request highest possible resolution and quality
+          width: { ideal: 4096, min: 1280 },
+          height: { ideal: 3072, min: 720 },
+          frameRate: { ideal: 30, min: 15 },
+          // Advanced video quality settings
+          aspectRatio: { ideal: 4/3 },
+          resizeMode: 'none', // Prevent resizing
+          // Additional quality hints
+          advanced: [{
+            width: { min: 1920, ideal: 4096 },
+            height: { min: 1080, ideal: 3072 },
+            frameRate: { min: 15, ideal: 30 }
+          }]
         }
       };
 
+      console.log('📱 Requesting camera with constraints:', constraints);
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      
+      // Log actual stream settings
+      const track = stream.getVideoTracks()[0];
+      const settings = track.getSettings();
+      console.log('✅ Camera started with settings:', {
+        width: settings.width,
+        height: settings.height,
+        frameRate: settings.frameRate,
+        facingMode: settings.facingMode,
+        aspectRatio: settings.aspectRatio
+      });
       
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -42,12 +71,18 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
         
         // Wait for video to load metadata before hiding loading
         videoRef.current.onloadedmetadata = () => {
+          console.log('📺 Video metadata loaded:', {
+            videoWidth: videoRef.current?.videoWidth,
+            videoHeight: videoRef.current?.videoHeight,
+            clientWidth: videoRef.current?.clientWidth,
+            clientHeight: videoRef.current?.clientHeight
+          });
           setIsLoading(false);
         };
       }
     } catch (err) {
       setIsLoading(false);
-      console.error("Error accessing camera:", err);
+      console.error("❌ Error accessing camera:", err);
       toast({
         title: "Camera Error",
         description: "Unable to access camera. Please check permissions and try again, or use a device with camera support.",
@@ -82,55 +117,202 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
     hideKeyboard();
     
     try {
+      console.log('📸 Starting photo capture process...');
+      
       // Use MediaStream Image Capture API for highest quality photos
       const track = streamRef.current?.getVideoTracks?.[0];
       
       if (track && 'ImageCapture' in window) {
         try {
+          console.log('🎯 Using ImageCapture API for maximum quality');
           const imageCapture = new (window as any).ImageCapture(track);
           
-          // Get the photo capabilities to use maximum resolution
+          // Get the photo capabilities and log them
           const capabilities = await imageCapture.getPhotoCapabilities();
+          console.log('📊 Camera capabilities:', {
+            imageWidth: capabilities.imageWidth,
+            imageHeight: capabilities.imageHeight,
+            redEyeReduction: capabilities.redEyeReduction,
+            flashMode: capabilities.flashMode,
+            focusMode: capabilities.focusMode,
+            iso: capabilities.iso,
+            whiteBalanceMode: capabilities.whiteBalanceMode,
+            exposureMode: capabilities.exposureMode,
+            colorTemperature: capabilities.colorTemperature,
+            brightness: capabilities.brightness,
+            contrast: capabilities.contrast,
+            saturation: capabilities.saturation,
+            sharpness: capabilities.sharpness
+          });
+          
+          // Optimize photo settings for maximum quality
           const settings: any = {};
           
           // Use maximum resolution if available
-          if (capabilities.imageWidth?.max) {
+          if (capabilities.imageWidth?.max && capabilities.imageHeight?.max) {
             settings.imageWidth = capabilities.imageWidth.max;
-          }
-          if (capabilities.imageHeight?.max) {
             settings.imageHeight = capabilities.imageHeight.max;
+            console.log(`🔧 Setting max resolution: ${settings.imageWidth}x${settings.imageHeight}`);
           }
           
-          // Take photo with maximum quality settings
+          // Optimize photo settings for quality
+          if (capabilities.focusMode && capabilities.focusMode.includes && capabilities.focusMode.includes('continuous')) {
+            settings.focusMode = 'continuous';
+            console.log('🎯 Setting focus mode: continuous');
+          }
+          
+          if (capabilities.whiteBalanceMode && capabilities.whiteBalanceMode.includes && capabilities.whiteBalanceMode.includes('auto')) {
+            settings.whiteBalanceMode = 'auto';
+            console.log('⚪ Setting white balance: auto');
+          }
+          
+          if (capabilities.exposureMode && capabilities.exposureMode.includes && capabilities.exposureMode.includes('continuous')) {
+            settings.exposureMode = 'continuous';
+            console.log('🌅 Setting exposure mode: continuous');
+          }
+          
+          // Use lowest ISO if available for best quality
+          if (capabilities.iso?.min) {
+            settings.iso = capabilities.iso.min;
+            console.log(`📷 Setting ISO: ${settings.iso}`);
+          }
+          
+          // Maximize image quality settings
+          if (capabilities.contrast?.max) {
+            settings.contrast = capabilities.contrast.max;
+          }
+          if (capabilities.saturation?.max) {
+            settings.saturation = capabilities.saturation.max;
+          }
+          if (capabilities.sharpness?.max) {
+            settings.sharpness = capabilities.sharpness.max;
+          }
+          
+          console.log('⚙️ Final capture settings:', settings);
+          
+          // Take photo with optimized settings
           const blob: Blob = await imageCapture.takePhoto(settings);
-          const dataUrl = await blobToDataUrl(blob);
+          console.log(`✅ Photo captured! Size: ${(blob.size / 1024 / 1024).toFixed(2)}MB, Type: ${blob.type}`);
+          
+          // Try PNG first for lossless quality, fallback to original format
+          let finalBlob = blob;
+          let format = blob.type.includes('png') ? 'PNG' : 'JPEG';
+          
+          // Convert to PNG if it's JPEG and we want lossless quality
+          if (blob.type.includes('jpeg') && blob.size < 10 * 1024 * 1024) { // Only convert if < 10MB
+            try {
+              const canvas = document.createElement('canvas');
+              const ctx = canvas.getContext('2d');
+              const img = new Image();
+              
+              await new Promise((resolve, reject) => {
+                img.onload = () => {
+                  canvas.width = img.width;
+                  canvas.height = img.height;
+                  ctx?.drawImage(img, 0, 0);
+                  canvas.toBlob((pngBlob) => {
+                    if (pngBlob && pngBlob.size < blob.size * 2) { // Only use PNG if reasonable size
+                      finalBlob = pngBlob;
+                      format = 'PNG';
+                      console.log(`🎨 Converted to PNG: ${(pngBlob.size / 1024 / 1024).toFixed(2)}MB`);
+                    }
+                    resolve(null);
+                  }, 'image/png');
+                };
+                img.onerror = reject;
+                img.src = URL.createObjectURL(blob);
+              });
+            } catch (e) {
+              console.log('PNG conversion failed, using original format');
+            }
+          }
+          
+          const dataUrl = await blobToDataUrl(finalBlob);
+          
+          // Extract and display photo information
+          const img = new Image();
+          img.onload = () => {
+            const resolution = `${img.width}x${img.height}`;
+            const sizeKB = (finalBlob.size / 1024).toFixed(1);
+            
+            setPhotoResolution(resolution);
+            setCaptureMethod('ImageCapture API');
+            setPhotoFormat(format);
+            setPhotoSize(finalBlob.size);
+            
+            console.log(`📊 Final photo info: ${resolution}, ${sizeKB}KB, ${format}, ImageCapture API`);
+          };
+          img.src = dataUrl;
+          
           setPhotoUri(dataUrl);
           setPhotoTaken(true);
           track.stop();
           return;
         } catch (e) {
-          console.warn('ImageCapture API failed, falling back to canvas capture:', e);
+          console.error('❌ ImageCapture API failed:', e);
+          setCaptureMethod('Canvas Fallback (ImageCapture failed)');
         }
+      } else {
+        console.log('⚠️ ImageCapture API not available, using canvas fallback');
+        setCaptureMethod('Canvas Fallback (API unavailable)');
       }
 
       // Fallback: capture from the video element into canvas
       if (videoRef.current && canvasRef.current) {
+        console.log('🎨 Using canvas capture fallback');
         const video = videoRef.current;
         const canvas = canvasRef.current;
         
-        // Set canvas dimensions to match video's natural resolution
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+        // Use video's natural resolution for maximum quality
+        const width = video.videoWidth || video.clientWidth;
+        const height = video.videoHeight || video.clientHeight;
         
-        // Draw video frame to canvas
+        console.log(`📐 Canvas capture dimensions: ${width}x${height}`);
+        
+        // Set canvas dimensions to match video's natural resolution
+        canvas.width = width;
+        canvas.height = height;
+        
+        // Draw video frame to canvas with high quality
         const ctx = canvas.getContext('2d');
         if (ctx) {
+          // Enable image smoothing for better quality
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+          
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           
-          // Convert canvas to data URL at maximum quality
-          const dataUrl = canvas.toDataURL('image/jpeg', 1.0);
+          // Try PNG first, fallback to JPEG
+          let dataUrl: string;
+          let format: string;
+          let size: number;
+          
+          try {
+            // Try PNG for lossless quality
+            dataUrl = canvas.toDataURL('image/png');
+            format = 'PNG';
+            size = Math.round(dataUrl.length * 0.75); // Approximate size
+            
+            // If PNG is too large, use high quality JPEG
+            if (size > 5 * 1024 * 1024) { // > 5MB
+              dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+              format = 'JPEG (95% quality)';
+              size = Math.round(dataUrl.length * 0.75);
+            }
+          } catch (e) {
+            // Fallback to JPEG
+            dataUrl = canvas.toDataURL('image/jpeg', 1.0);
+            format = 'JPEG (100% quality)';
+            size = Math.round(dataUrl.length * 0.75);
+          }
+          
+          console.log(`✅ Canvas capture complete: ${width}x${height}, ${(size/1024/1024).toFixed(2)}MB, ${format}`);
+          
           setPhotoUri(dataUrl);
           setPhotoTaken(true);
+          setPhotoResolution(`${width}x${height}`);
+          setPhotoFormat(format);
+          setPhotoSize(size);
           
           // Stop camera stream
           if (streamRef.current) {
@@ -139,10 +321,10 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
         }
       }
     } catch (err) {
-      console.error('Error taking photo:', err);
+      console.error('❌ Critical error during photo capture:', err);
       toast({
         title: 'Capture Error',
-        description: 'Failed to capture photo using Media API. Please try again.',
+        description: `Failed to capture photo: ${err instanceof Error ? err.message : 'Unknown error'}`,
         variant: 'destructive',
         duration: 6000,
       });
@@ -152,6 +334,10 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
   const retakePhoto = () => {
     setPhotoTaken(false);
     setPhotoUri('');
+    setPhotoResolution('');
+    setCaptureMethod('');
+    setPhotoFormat('JPEG');
+    setPhotoSize(0);
     startCamera();
   };
 
@@ -161,6 +347,10 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
       // Reset the state and automatically start the camera for the next photo
       setPhotoTaken(false);
       setPhotoUri('');
+      setPhotoResolution('');
+      setCaptureMethod('');
+      setPhotoFormat('JPEG');
+      setPhotoSize(0);
       // We'll start the camera in useEffect that watches photoTaken
     }
   };
@@ -218,11 +408,23 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
             className="absolute inset-0 w-full h-full object-cover"
           />
         ) : (
-          <img 
-            src={photoUri} 
-            alt="Captured photo" 
-            className="absolute inset-0 w-full h-full object-contain"
-          />
+          <>
+            <img 
+              src={photoUri} 
+              alt="Captured photo" 
+              className="absolute inset-0 w-full h-full object-contain"
+            />
+            {/* Photo Quality Information Overlay */}
+            {photoResolution && (
+              <div className="absolute top-2 left-2 bg-black/70 text-white text-xs rounded px-2 py-1 space-y-1">
+                <div className="font-semibold">📸 Photo Info:</div>
+                <div>Resolution: {photoResolution}</div>
+                <div>Format: {photoFormat}</div>
+                <div>Size: {(photoSize / 1024 / 1024).toFixed(2)}MB</div>
+                <div>Method: {captureMethod}</div>
+              </div>
+            )}
+          </>
         )}
         
         {/* Enhanced mobile hint overlay with landscape guidance */}
