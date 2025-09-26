@@ -1,7 +1,8 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { CameraIcon, CheckIcon, RefreshCw, ZoomIn } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { CameraIcon, CheckIcon, RefreshCw, Settings } from 'lucide-react';
 import { usePallet } from '@/contexts/PalletContext';
 import { useToast } from '@/hooks/use-toast';
 import { useIsMobile, useDeviceOrientation } from '@/hooks/use-mobile';
@@ -10,14 +11,37 @@ interface CameraViewProps {
   onPhotoTaken: (uri: string) => void;
 }
 
+type PhotoFormat = 'PNG' | 'BMP';
+
+interface PhotoFormatInfo {
+  label: string;
+  description: string;
+  extension: string;
+}
+
 const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
   const [photoTaken, setPhotoTaken] = useState<boolean>(false);
   const [photoUri, setPhotoUri] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [photoResolution, setPhotoResolution] = useState<string>('');
   const [captureMethod, setCaptureMethod] = useState<string>('');
-  const [photoFormat, setPhotoFormat] = useState<string>('JPEG');
+  const [photoFormat, setPhotoFormat] = useState<string>('PNG');
   const [photoSize, setPhotoSize] = useState<number>(0);
+  const [selectedFormat, setSelectedFormat] = useState<PhotoFormat>('PNG');
+  const [showFormatSelector, setShowFormatSelector] = useState<boolean>(false);
+
+  const formatOptions: Record<PhotoFormat, PhotoFormatInfo> = {
+    PNG: {
+      label: 'PNG (Lossless Compressed)',
+      description: 'Best balance of quality and file size',
+      extension: 'png'
+    },
+    BMP: {
+      label: 'BMP (Uncompressed)',
+      description: 'Maximum quality, largest file size',
+      extension: 'bmp'
+    }
+  };
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -112,6 +136,67 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
       reader.readAsDataURL(blob);
     });
 
+  // Convert canvas to BMP (uncompressed) format
+  const canvasToBMP = (canvas: HTMLCanvasElement): string => {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Cannot get canvas context');
+    
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const width = canvas.width;
+    const height = canvas.height;
+    
+    // BMP header (54 bytes) + pixel data
+    const rowSize = Math.floor((24 * width + 31) / 32) * 4;
+    const pixelArraySize = rowSize * height;
+    const fileSize = 54 + pixelArraySize;
+    
+    const buffer = new ArrayBuffer(fileSize);
+    const view = new DataView(buffer);
+    const data = imageData.data;
+    
+    // BMP file header (14 bytes)
+    view.setUint16(0, 0x4D42, false); // 'BM'
+    view.setUint32(2, fileSize, true); // File size
+    view.setUint32(6, 0, true); // Reserved
+    view.setUint32(10, 54, true); // Pixel data offset
+    
+    // DIB header (40 bytes)
+    view.setUint32(14, 40, true); // DIB header size
+    view.setInt32(18, width, true); // Width
+    view.setInt32(22, -height, true); // Height (negative for top-down)
+    view.setUint16(26, 1, true); // Planes
+    view.setUint16(28, 24, true); // Bits per pixel
+    view.setUint32(30, 0, true); // Compression
+    view.setUint32(34, pixelArraySize, true); // Image size
+    view.setInt32(38, 2835, true); // X pixels per meter
+    view.setInt32(42, 2835, true); // Y pixels per meter
+    view.setUint32(46, 0, true); // Colors used
+    view.setUint32(50, 0, true); // Important colors
+    
+    // Pixel data (BGR format, bottom-up)
+    let offset = 54;
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const i = (y * width + x) * 4;
+        view.setUint8(offset++, data[i + 2]); // Blue
+        view.setUint8(offset++, data[i + 1]); // Green  
+        view.setUint8(offset++, data[i]); // Red
+      }
+      // Pad to 4-byte boundary
+      while (offset % 4 !== 0) {
+        view.setUint8(offset++, 0);
+      }
+    }
+    
+    // Convert to base64 data URL
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return 'data:image/bmp;base64,' + btoa(binary);
+  };
+
   const takePhoto = async () => {
     // Hide keyboard before taking photo
     hideKeyboard();
@@ -194,57 +279,67 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
           const blob: Blob = await imageCapture.takePhoto(settings);
           console.log(`✅ Photo captured! Size: ${(blob.size / 1024 / 1024).toFixed(2)}MB, Type: ${blob.type}`);
           
-          // Try PNG first for lossless quality, fallback to original format
-          let finalBlob = blob;
-          let format = blob.type.includes('png') ? 'PNG' : 'JPEG';
+          // Convert to selected lossless format
+          let finalDataUrl: string;
+          let format: string;
+          let size: number;
           
-          // Convert to PNG if it's JPEG and we want lossless quality
-          if (blob.type.includes('jpeg') && blob.size < 10 * 1024 * 1024) { // Only convert if < 10MB
-            try {
-              const canvas = document.createElement('canvas');
-              const ctx = canvas.getContext('2d');
-              const img = new Image();
+          // Always convert to canvas for format control
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          const img = new Image();
+          
+          await new Promise((resolve, reject) => {
+            img.onload = () => {
+              canvas.width = img.width;
+              canvas.height = img.height;
+              ctx?.drawImage(img, 0, 0);
               
-              await new Promise((resolve, reject) => {
-                img.onload = () => {
-                  canvas.width = img.width;
-                  canvas.height = img.height;
-                  ctx?.drawImage(img, 0, 0);
-                  canvas.toBlob((pngBlob) => {
-                    if (pngBlob && pngBlob.size < blob.size * 2) { // Only use PNG if reasonable size
-                      finalBlob = pngBlob;
-                      format = 'PNG';
-                      console.log(`🎨 Converted to PNG: ${(pngBlob.size / 1024 / 1024).toFixed(2)}MB`);
-                    }
-                    resolve(null);
-                  }, 'image/png');
-                };
-                img.onerror = reject;
-                img.src = URL.createObjectURL(blob);
-              });
-            } catch (e) {
-              console.log('PNG conversion failed, using original format');
-            }
-          }
-          
-          const dataUrl = await blobToDataUrl(finalBlob);
+              try {
+                if (selectedFormat === 'BMP') {
+                  finalDataUrl = canvasToBMP(canvas);
+                  format = 'BMP (Uncompressed)';
+                  size = Math.round(finalDataUrl.length * 0.75);
+                  console.log(`🎨 Converted to BMP: ${(size / 1024 / 1024).toFixed(2)}MB (uncompressed)`);
+                } else {
+                  finalDataUrl = canvas.toDataURL('image/png');
+                  format = 'PNG (Lossless)';
+                  size = Math.round(finalDataUrl.length * 0.75);
+                  console.log(`🎨 Converted to PNG: ${(size / 1024 / 1024).toFixed(2)}MB (lossless)`);
+                }
+                
+                // Warn about large file sizes
+                if (size > 20 * 1024 * 1024) {
+                  toast({
+                    title: "Large File Warning",
+                    description: `Photo is ${(size / 1024 / 1024).toFixed(1)}MB. Consider using PNG format for smaller file size.`,
+                  });
+                }
+                
+                resolve(null);
+              } catch (e) {
+                reject(e);
+              }
+            };
+            img.onerror = reject;
+            img.src = URL.createObjectURL(blob);
+          });
           
           // Extract and display photo information
-          const img = new Image();
-          img.onload = () => {
-            const resolution = `${img.width}x${img.height}`;
-            const sizeKB = (finalBlob.size / 1024).toFixed(1);
+          const testImg = new Image();
+          testImg.onload = () => {
+            const resolution = `${testImg.width}x${testImg.height}`;
             
             setPhotoResolution(resolution);
             setCaptureMethod('ImageCapture API');
             setPhotoFormat(format);
-            setPhotoSize(finalBlob.size);
+            setPhotoSize(size);
             
-            console.log(`📊 Final photo info: ${resolution}, ${sizeKB}KB, ${format}, ImageCapture API`);
+            console.log(`📊 Final photo info: ${resolution}, ${(size/1024/1024).toFixed(2)}MB, ${format}, ImageCapture API`);
           };
-          img.src = dataUrl;
+          testImg.src = finalDataUrl;
           
-          setPhotoUri(dataUrl);
+          setPhotoUri(finalDataUrl);
           setPhotoTaken(true);
           track.stop();
           return;
@@ -282,28 +377,42 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
           
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           
-          // Try PNG first, fallback to JPEG
+          // Use selected lossless format
           let dataUrl: string;
           let format: string;
           let size: number;
           
           try {
-            // Try PNG for lossless quality
-            dataUrl = canvas.toDataURL('image/png');
-            format = 'PNG';
-            size = Math.round(dataUrl.length * 0.75); // Approximate size
-            
-            // If PNG is too large, use high quality JPEG
-            if (size > 5 * 1024 * 1024) { // > 5MB
-              dataUrl = canvas.toDataURL('image/jpeg', 0.95);
-              format = 'JPEG (95% quality)';
+            if (selectedFormat === 'BMP') {
+              dataUrl = canvasToBMP(canvas);
+              format = 'BMP (Uncompressed)';
               size = Math.round(dataUrl.length * 0.75);
+              console.log(`🎨 Canvas to BMP: ${(size / 1024 / 1024).toFixed(2)}MB (uncompressed)`);
+            } else {
+              dataUrl = canvas.toDataURL('image/png');
+              format = 'PNG (Lossless)';
+              size = Math.round(dataUrl.length * 0.75);
+              console.log(`🎨 Canvas to PNG: ${(size / 1024 / 1024).toFixed(2)}MB (lossless)`);
+            }
+            
+            // Warn about large file sizes
+            if (size > 20 * 1024 * 1024) {
+              toast({
+                title: "Large File Warning", 
+                description: `Photo is ${(size / 1024 / 1024).toFixed(1)}MB. Consider using PNG format for smaller file size.`,
+              });
             }
           } catch (e) {
-            // Fallback to JPEG
-            dataUrl = canvas.toDataURL('image/jpeg', 1.0);
-            format = 'JPEG (100% quality)';
+            console.error('❌ Error converting to selected format:', e);
+            // Emergency fallback to PNG
+            dataUrl = canvas.toDataURL('image/png');
+            format = 'PNG (Fallback)';
             size = Math.round(dataUrl.length * 0.75);
+            toast({
+              title: "Format Error",
+              description: "Failed to use selected format, using PNG instead.",
+              variant: "destructive",
+            });
           }
           
           console.log(`✅ Canvas capture complete: ${width}x${height}, ${(size/1024/1024).toFixed(2)}MB, ${format}`);
@@ -336,7 +445,7 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
     setPhotoUri('');
     setPhotoResolution('');
     setCaptureMethod('');
-    setPhotoFormat('JPEG');
+    setPhotoFormat('PNG');
     setPhotoSize(0);
     startCamera();
   };
@@ -349,7 +458,7 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
       setPhotoUri('');
       setPhotoResolution('');
       setCaptureMethod('');
-      setPhotoFormat('JPEG');
+      setPhotoFormat('PNG');
       setPhotoSize(0);
       // We'll start the camera in useEffect that watches photoTaken
     }
@@ -384,6 +493,46 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
         <p className="text-xs text-muted-foreground">
           {isMobile ? "Tap to capture" : "Position camera to capture the full side of the pallet"}
         </p>
+        
+        {/* Format Selector */}
+        <div className="flex items-center justify-center gap-2 mt-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowFormatSelector(!showFormatSelector)}
+            className="h-8 px-2 text-xs"
+          >
+            <Settings className="h-3 w-3 mr-1" />
+            {formatOptions[selectedFormat].label}
+          </Button>
+        </div>
+        
+        {showFormatSelector && (
+          <div className="mt-2 bg-background/95 backdrop-blur rounded-lg p-3 border">
+            <div className="text-xs font-semibold mb-2">Photo Format:</div>
+            <Select value={selectedFormat} onValueChange={(value: PhotoFormat) => setSelectedFormat(value)}>
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(formatOptions) as PhotoFormat[]).map((format) => (
+                  <SelectItem key={format} value={format}>
+                    <div className="text-left">
+                      <div className="font-medium">{formatOptions[format].label}</div>
+                      <div className="text-xs text-muted-foreground">{formatOptions[format].description}</div>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="text-xs text-muted-foreground mt-2">
+              {selectedFormat === 'BMP' ? 
+                '⚠️ BMP files are very large but have zero compression' : 
+                '✅ PNG provides lossless compression with smaller file sizes'
+              }
+            </div>
+          </div>
+        )}
       </div>
       
       {/* Camera Container - Flexible height to fill available space */}
