@@ -26,6 +26,11 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
   const isMobile = useIsMobile();
   const orientation = useDeviceOrientation();
 
+  // Auto-open camera on mount
+  useEffect(() => {
+    takePhoto();
+  }, []);
+
   const takePhoto = async () => {
     try {
       setIsLoading(true);
