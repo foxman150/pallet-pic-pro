@@ -142,8 +142,16 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
 
   const confirmPhoto = () => {
     if (photoUri) {
-      onPhotoTaken(photoUri);
-      // Don't reset state here - let the component unmount/remount for next photo
+      const currentPhotoUri = photoUri;
+      // Reset state immediately before calling onPhotoTaken
+      setPhotoTaken(false);
+      setPhotoUri('');
+      setPhotoResolution('');
+      setCaptureMethod('');
+      setPhotoFormat('');
+      setPhotoSize(0);
+      // Call with the saved photo URI
+      onPhotoTaken(currentPhotoUri);
     }
   };
 
