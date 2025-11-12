@@ -8,6 +8,9 @@
 
 let upscalerInstance: any | null = null;
 
+// Maximum dimensions to prevent memory issues
+const MAX_DIMENSION = 2048; // Reduced from unlimited to prevent OOM
+
 async function getUpscaler(): Promise<any> {
   if (!upscalerInstance) {
     console.log('🤖 Initializing AI upscaler...');
@@ -47,6 +50,32 @@ export async function upscaleImage(
     });
 
     console.log(`📐 Original dimensions: ${img.width}x${img.height}`);
+    
+    // Resize if image is too large to prevent OOM
+    let processedDataUrl = imageDataUrl;
+    if (img.width > MAX_DIMENSION || img.height > MAX_DIMENSION) {
+      console.log('⚠️ Image too large, resizing before AI upscaling...');
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Canvas context unavailable');
+      
+      let newWidth = img.width;
+      let newHeight = img.height;
+      if (newWidth > newHeight) {
+        newHeight = Math.round((newHeight * MAX_DIMENSION) / newWidth);
+        newWidth = MAX_DIMENSION;
+      } else {
+        newWidth = Math.round((newWidth * MAX_DIMENSION) / newHeight);
+        newHeight = MAX_DIMENSION;
+      }
+      
+      canvas.width = newWidth;
+      canvas.height = newHeight;
+      ctx.drawImage(img, 0, 0, newWidth, newHeight);
+      processedDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+      console.log(`📐 Resized to: ${newWidth}x${newHeight}`);
+    }
+    
     onProgress?.(10);
 
     const upscaler = await getUpscaler();
@@ -61,11 +90,15 @@ export async function upscaleImage(
       const progressStart = 20 + (i * 40);
       const progressEnd = progressStart + 40;
       
-      result = await upscaler.upscale(result, {
+      result = await upscaler.upscale(i === 0 ? processedDataUrl : result, {
         output: 'base64',
-        patchSize: 64, // Process in smaller patches for memory efficiency
+        patchSize: 32, // Smaller patches to reduce memory usage
         padding: 2,
-        progress: (progress) => {
+        progress: (progress, slice) => {
+          // Dispose of tensor slices to prevent memory leak
+          if (slice && typeof slice.dispose === 'function') {
+            slice.dispose();
+          }
           const currentProgress = progressStart + (progress * (progressEnd - progressStart));
           onProgress?.(Math.round(currentProgress));
         },
