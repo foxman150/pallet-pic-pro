@@ -82,7 +82,7 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ onRestart }) => {
             // Convert data URI to Blob
             const response = await fetch(photoUri);
             const blob = await response.blob();
-            return new File([blob], fileName, { type: 'image/png' });
+            return new File([blob], fileName, { type: 'image/jpeg' });
           })
         );
 

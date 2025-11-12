@@ -47,7 +47,7 @@ export const generateSecureFilename = (customerName: string, poNumber: string, w
   const sanitizedWrap = sanitizeFilename(wrapStatus);
   const timestamp = Date.now();
   
-  return `${sanitizedCustomer}_${sanitizedPo}_${sanitizedWrap}_Pallet${palletIndex}_Side${sideIndex}_${timestamp}.png`;
+  return `${sanitizedCustomer}_${sanitizedPo}_${sanitizedWrap}_Pallet${palletIndex}_Side${sideIndex}_${timestamp}.jpg`;
 };
 
 // Local storage encryption (simple implementation)
