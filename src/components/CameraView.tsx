@@ -1,12 +1,15 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { CameraIcon, CheckIcon, RefreshCw, Sparkles } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { CameraIcon, CheckIcon, RefreshCw, Sparkles, Zap } from 'lucide-react';
 import { usePallet } from '@/contexts/PalletContext';
 import { useToast } from '@/hooks/use-toast';
 import { useIsMobile, useDeviceOrientation } from '@/hooks/use-mobile';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { processImage } from '@/lib/imageProcessing';
+import { upscaleImage, isUpscalingSupported } from '@/lib/aiUpscaling';
 
 interface CameraViewProps {
   onPhotoTaken: (uri: string) => void;
@@ -17,14 +20,18 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
   const [photoUri, setPhotoUri] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [aiEnhanceEnabled, setAiEnhanceEnabled] = useState<boolean>(false);
+  const [aiProgress, setAiProgress] = useState<number>(0);
   const [photoResolution, setPhotoResolution] = useState<string>('');
   const [captureMethod, setCaptureMethod] = useState<string>('');
   const [photoFormat, setPhotoFormat] = useState<string>('');
   const [photoSize, setPhotoSize] = useState<number>(0);
+  const [isAiEnhanced, setIsAiEnhanced] = useState<boolean>(false);
   const { currentPallet, totalPallets, currentSide } = usePallet();
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const orientation = useDeviceOrientation();
+  const supportsAI = isUpscalingSupported();
 
   // Auto-open camera on mount and when moving to next side/pallet
   useEffect(() => {
@@ -62,25 +69,62 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
         setPhotoResolution(resolution);
         console.log(`📊 Original photo: ${resolution}`);
 
-        // Use raw camera output for maximum quality (Phase 1: No destructive filters)
-        // This preserves Apple's Deep Fusion, Smart HDR, and native computational photography
-        console.log('📸 Using raw camera output for maximum barcode quality');
-        
-        const originalSize = Math.round(photo.dataUrl!.length * 0.75);
-        setPhotoFormat('JPEG (Raw Camera)');
-        setPhotoSize(originalSize);
-        setPhotoUri(photo.dataUrl!);
+        let finalPhotoUri = photo.dataUrl!;
+        let finalFormat = 'JPEG (Raw Camera)';
+        let enhancedWithAI = false;
+
+        // Apply AI enhancement if enabled
+        if (aiEnhanceEnabled && supportsAI) {
+          setIsProcessing(true);
+          setAiProgress(0);
+          toast({
+            title: "AI Enhancement",
+            description: "Upscaling image with AI (this may take 5-10 seconds)...",
+            duration: 3000,
+          });
+
+          try {
+            finalPhotoUri = await upscaleImage(photo.dataUrl!, 2, (progress) => {
+              setAiProgress(progress);
+            });
+            finalFormat = 'PNG (AI Enhanced 2x)';
+            enhancedWithAI = true;
+            
+            toast({
+              title: "AI Enhancement Complete",
+              description: "Image resolution increased 2x for better barcode reading",
+              duration: 2000,
+            });
+          } catch (error) {
+            console.error('AI enhancement failed, using original:', error);
+            toast({
+              title: "AI Enhancement Failed",
+              description: "Using original high-quality photo",
+              variant: "destructive",
+              duration: 3000,
+            });
+          }
+        }
+
+        const finalSize = Math.round(finalPhotoUri.length * 0.75);
+        setPhotoFormat(finalFormat);
+        setPhotoSize(finalSize);
+        setPhotoUri(finalPhotoUri);
+        setIsAiEnhanced(enhancedWithAI);
         setPhotoTaken(true);
 
-        console.log(`✅ Raw photo ready: ${(originalSize / 1024 / 1024).toFixed(2)}MB`);
+        console.log(`✅ Photo ready: ${(finalSize / 1024 / 1024).toFixed(2)}MB ${enhancedWithAI ? '(AI Enhanced)' : ''}`);
         
-        toast({
-          title: "Photo Captured",
-          description: "Maximum quality preserved for barcode reading",
-          duration: 2000,
-        });
+        if (!aiEnhanceEnabled) {
+          toast({
+            title: "Photo Captured",
+            description: "Maximum quality preserved for barcode reading",
+            duration: 2000,
+          });
+        }
 
         setIsProcessing(false);
+        setAiProgress(0);
       };
       img.onerror = () => {
         toast({
@@ -118,6 +162,8 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
     setCaptureMethod('');
     setPhotoFormat('');
     setPhotoSize(0);
+    setIsAiEnhanced(false);
+    setAiProgress(0);
   };
 
   const confirmPhoto = () => {
@@ -130,6 +176,8 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
       setCaptureMethod('');
       setPhotoFormat('');
       setPhotoSize(0);
+      setIsAiEnhanced(false);
+      setAiProgress(0);
       // Call with the saved photo URI
       onPhotoTaken(currentPhotoUri);
     }
@@ -145,6 +193,22 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
         <p className="text-xs text-muted-foreground">
           {isMobile ? "Tap to capture" : "Position camera to capture the full side of the pallet"}
         </p>
+        
+        {/* AI Enhancement Toggle */}
+        {supportsAI && !photoTaken && (
+          <div className="flex items-center justify-center gap-2 mt-2">
+            <Switch
+              id="ai-enhance"
+              checked={aiEnhanceEnabled}
+              onCheckedChange={setAiEnhanceEnabled}
+              disabled={isLoading || isProcessing}
+            />
+            <Label htmlFor="ai-enhance" className="text-xs flex items-center gap-1 cursor-pointer">
+              <Zap className="h-3 w-3 text-yellow-500" />
+              AI Super-Resolution (2x, slower)
+            </Label>
+          </div>
+        )}
       </div>
       
       {/* Camera Container - Flexible height to fill available space */}
@@ -154,14 +218,28 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
             <div className="text-white text-center">
               <div className="animate-pulse-light mb-2">
                 {isProcessing ? (
-                  <Sparkles className="h-8 w-8 mx-auto" />
+                  <Zap className="h-8 w-8 mx-auto text-yellow-400" />
                 ) : (
                   <CameraIcon className="h-8 w-8 mx-auto" />
                 )}
               </div>
               <p className="text-sm">
-                {isProcessing ? 'Enhancing photo...' : 'Opening camera...'}
+                {isProcessing ? (
+                  <>
+                    AI enhancing photo... {aiProgress > 0 ? `${aiProgress}%` : ''}
+                  </>
+                ) : (
+                  'Opening camera...'
+                )}
               </p>
+              {isProcessing && aiProgress > 0 && (
+                <div className="w-48 h-2 bg-gray-700 rounded-full mt-2 overflow-hidden">
+                  <div 
+                    className="h-full bg-yellow-400 transition-all duration-300"
+                    style={{ width: `${aiProgress}%` }}
+                  />
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -187,15 +265,33 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
             {photoResolution && (
               <div className="absolute top-2 left-2 bg-black/80 text-white text-xs rounded-lg px-3 py-2 space-y-1 backdrop-blur-sm">
                 <div className="font-semibold flex items-center gap-1">
-                  <Sparkles className="h-3 w-3" />
-                  Maximum Quality
+                  {isAiEnhanced ? (
+                    <>
+                      <Zap className="h-3 w-3 text-yellow-400" />
+                      AI Enhanced
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-3 w-3" />
+                      Maximum Quality
+                    </>
+                  )}
                 </div>
                 <div>Resolution: {photoResolution}</div>
                 <div>Format: {photoFormat}</div>
                 <div>Size: {(photoSize / 1024 / 1024).toFixed(2)}MB</div>
                 <div className="text-green-400 text-[10px]">✓ Deep Fusion + Smart HDR</div>
-                <div className="text-blue-400 text-[10px]">✓ Raw Camera Output</div>
-                <div className="text-purple-400 text-[10px]">✓ Optimized for Barcodes</div>
+                {isAiEnhanced ? (
+                  <>
+                    <div className="text-yellow-400 text-[10px]">✓ AI Super-Resolution 2x</div>
+                    <div className="text-purple-400 text-[10px]">✓ Enhanced Barcode Detail</div>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-blue-400 text-[10px]">✓ Raw Camera Output</div>
+                    <div className="text-purple-400 text-[10px]">✓ Optimized for Barcodes</div>
+                  </>
+                )}
               </div>
             )}
           </>
