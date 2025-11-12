@@ -30,20 +30,25 @@ const PalletApp: React.FC = () => {
   } = usePallet();
 
   const handlePhotoTaken = (photoUri: string) => {
+    console.log('📸 Photo taken - Current state:', { currentPallet, currentSide, totalPallets });
+    
     // Save the photo
     addPhoto(currentPallet, currentSide, photoUri);
     
     // Move to next side or next pallet
     if (currentSide < 4) {
+      console.log('➡️ Moving to next side:', currentSide + 1);
       // Go to next side of current pallet
       setCurrentSide(currentSide + 1);
     } else {
       // This pallet is complete
       if (currentPallet < totalPallets) {
+        console.log('➡️ Moving to next pallet:', currentPallet + 1);
         // Move to the next pallet
         setCurrentPallet(currentPallet + 1);
         setCurrentSide(1);
       } else {
+        console.log('✅ All photos complete! Moving to gallery');
         // All pallets complete, show gallery
         setStage(AppStage.GALLERY);
       }
@@ -71,11 +76,13 @@ const PalletApp: React.FC = () => {
   };
 
   const handleRestart = () => {
+    console.log('🔄 Restart called');
     resetData();
     setStage(AppStage.COUNT_SELECTION);
   };
 
   const renderStage = () => {
+    console.log('🎭 Rendering stage:', AppStage[stage]);
     switch(stage) {
       case AppStage.COUNT_SELECTION:
         return <PalletCountSelector onContinue={() => setStage(AppStage.CUSTOMER_INFO)} />;
