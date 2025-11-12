@@ -20,7 +20,7 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
   const [photoUri, setPhotoUri] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [aiEnhanceEnabled, setAiEnhanceEnabled] = useState<boolean>(false);
+  const [aiEnhanceEnabled] = useState<boolean>(true); // Always enabled
   const [aiProgress, setAiProgress] = useState<number>(0);
   const [photoResolution, setPhotoResolution] = useState<string>('');
   const [captureMethod, setCaptureMethod] = useState<string>('');
@@ -201,25 +201,15 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
         <h2 className="text-base sm:text-lg font-semibold">
           Pallet {currentPallet} of {totalPallets} - Side {currentSide}
         </h2>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground flex items-center justify-center gap-1">
           {isMobile ? "Tap to capture" : "Position camera to capture the full side of the pallet"}
+          {supportsAI && (
+            <span className="inline-flex items-center gap-1 ml-2 text-yellow-600 font-medium">
+              <Zap className="h-3 w-3" />
+              AI Enhanced
+            </span>
+          )}
         </p>
-        
-        {/* AI Enhancement Toggle */}
-        {supportsAI && !photoTaken && (
-          <div className="flex items-center justify-center gap-2 mt-2">
-            <Switch
-              id="ai-enhance"
-              checked={aiEnhanceEnabled}
-              onCheckedChange={setAiEnhanceEnabled}
-              disabled={isLoading || isProcessing}
-            />
-            <Label htmlFor="ai-enhance" className="text-xs flex items-center gap-1 cursor-pointer">
-              <Zap className="h-3 w-3 text-yellow-500" />
-              AI Super-Resolution (2x, slower)
-            </Label>
-          </div>
-        )}
       </div>
       
       {/* Camera Container - Flexible height to fill available space */}
