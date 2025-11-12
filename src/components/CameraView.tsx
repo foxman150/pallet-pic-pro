@@ -83,38 +83,49 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
         let finalFormat = 'JPEG (Raw Camera)';
         let enhancedWithAI = false;
 
-        // Apply AI enhancement (always enabled)
+        // Apply AI enhancement (always enabled, but skip if disabled this session)
         if (aiEnhanceEnabled) {
-          setIsProcessing(true);
-          setAiProgress(0);
-          toast({
-            title: "AI Enhancement",
-            description: "Upscaling image with AI (this may take 5-10 seconds)...",
-            duration: 3000,
-          });
-
-          try {
-            const { upscaleImage } = await import('@/lib/aiUpscaling');
-            finalPhotoUri = await upscaleImage(photo.dataUrl!, 2, (progress) => {
-              setAiProgress(progress);
-            });
-            finalFormat = 'PNG (AI Enhanced 2x)';
-            enhancedWithAI = true;
-            console.log('✅ AI enhancement complete');
-            
+          const aiDisabled = sessionStorage.getItem('AI_UPSCALE_DISABLED') === '1';
+          if (aiDisabled) {
+            console.warn('AI upscaling disabled for this session; using original photo.');
             toast({
-              title: "AI Enhancement Complete",
-              description: "Image resolution increased 2x for better barcode reading",
-              duration: 2000,
+              title: "AI Disabled This Session",
+              description: "Using original photo to keep things fast and stable.",
+              duration: 2500,
             });
-          } catch (error) {
-            console.error('AI enhancement failed, using original:', error);
+          } else {
+            setIsProcessing(true);
+            setAiProgress(0);
             toast({
-              title: "AI Enhancement Failed",
-              description: "Using original high-quality photo",
-              variant: "destructive",
+              title: "AI Enhancement",
+              description: "Upscaling image with AI (this may take 5-10 seconds)...",
               duration: 3000,
             });
+
+            try {
+              const { upscaleImage } = await import('@/lib/aiUpscaling');
+              finalPhotoUri = await upscaleImage(photo.dataUrl!, 2, (progress) => {
+                setAiProgress(progress);
+              });
+              finalFormat = 'PNG (AI Enhanced 2x)';
+              enhancedWithAI = true;
+              console.log('✅ AI enhancement complete');
+              
+              toast({
+                title: "AI Enhancement Complete",
+                description: "Image resolution increased 2x for better barcode reading",
+                duration: 2000,
+              });
+            } catch (error) {
+              console.error('AI enhancement failed, using original:', error);
+              try { sessionStorage.setItem('AI_UPSCALE_DISABLED', '1'); } catch {}
+              toast({
+                title: "AI Enhancement Disabled",
+                description: "AI failed and was disabled for this session. Using original photo.",
+                variant: "destructive",
+                duration: 3000,
+              });
+            }
           }
         }
 

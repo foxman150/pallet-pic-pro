@@ -9,12 +9,26 @@
 let upscalerInstance: any | null = null;
 
 // Maximum dimensions to prevent memory issues
-const MAX_DIMENSION = 2048; // Reduced from unlimited to prevent OOM
+const MAX_DIMENSION = 1600; // Lowered to reduce memory/OOM risk on mobile
 
 async function getUpscaler(): Promise<any> {
   if (!upscalerInstance) {
-    console.log('🤖 Initializing AI upscaler...');
-    const { default: Upscaler } = await import('upscaler');
+    console.log('🤖 Initializing AI upscaler (WASM backend)...');
+    const [{ default: Upscaler }, tfjs, wasm] = await Promise.all([
+      import('upscaler'),
+      import('@tensorflow/tfjs'),
+      import('@tensorflow/tfjs-backend-wasm'),
+    ]);
+
+    // Ensure WASM assets are resolvable (reliable on iOS Safari)
+    if (typeof (wasm as any).setWasmPaths === 'function') {
+      (wasm as any).setWasmPaths('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@4.22.0/dist/');
+    }
+
+    // Prefer WASM for stability over WebGL on mobile
+    try { await (tfjs as any).setBackend('wasm'); } catch {}
+    await (tfjs as any).ready();
+
     upscalerInstance = new Upscaler({
       model: {
         path: 'https://cdn.jsdelivr.net/npm/@upscalerjs/default-model@latest/models/default/x2.json',
@@ -85,25 +99,34 @@ export async function upscaleImage(
     let result: string | HTMLCanvasElement = imageDataUrl;
     const iterations = scale === 4 ? 2 : 1;
 
-    for (let i = 0; i < iterations; i++) {
-      console.log(`🔄 Upscaling iteration ${i + 1}/${iterations}...`);
-      const progressStart = 20 + (i * 40);
-      const progressEnd = progressStart + 40;
-      
-      result = await upscaler.upscale(i === 0 ? processedDataUrl : result, {
-        output: 'base64',
-        patchSize: 32, // Smaller patches to reduce memory usage
-        padding: 2,
-        progress: (progress, slice) => {
-          // Dispose of tensor slices to prevent memory leak
-          if (slice && typeof slice.dispose === 'function') {
-            slice.dispose();
-          }
-          const currentProgress = progressStart + (progress * (progressEnd - progressStart));
-          onProgress?.(Math.round(currentProgress));
-        },
-      });
-    }
+for (let i = 0; i < iterations; i++) {
+  console.log(`🔄 Upscaling iteration ${i + 1}/${iterations}...`);
+  const progressStart = 20 + i * 40;
+  const progressEnd = progressStart + 40;
+
+  const src = i === 0 ? processedDataUrl : (result as string);
+  const TIMEOUT_MS = 15000; // guard to avoid OS killing the page
+
+  const upscalePromise = upscaler.upscale(src, {
+    output: 'base64',
+    patchSize: 16, // even smaller patches to minimize memory
+    padding: 2,
+    progress: (progress, slice) => {
+      try {
+        if (slice && typeof (slice as any).dispose === 'function') {
+          (slice as any).dispose();
+        }
+      } catch {}
+      const currentProgress = progressStart + progress * (progressEnd - progressStart);
+      onProgress?.(Math.round(currentProgress));
+    },
+  });
+
+  result = (await Promise.race([
+    upscalePromise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('AI upscaling timeout')), TIMEOUT_MS)),
+  ])) as string;
+}
 
     onProgress?.(100);
 
@@ -120,8 +143,9 @@ export async function upscaleImage(
 
     return result as string;
   } catch (error) {
-    console.error('❌ AI upscaling failed:', error);
-    throw error;
+console.error('❌ AI upscaling failed:', error);
+try { sessionStorage.setItem('AI_UPSCALE_DISABLED', '1'); } catch {}
+throw error;
   }
 }
 
