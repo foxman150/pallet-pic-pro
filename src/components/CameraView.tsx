@@ -194,12 +194,12 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
           const blob: Blob = await imageCapture.takePhoto(settings);
           console.log(`✅ Photo captured! Size: ${(blob.size / 1024 / 1024).toFixed(2)}MB, Type: ${blob.type}`);
           
-          // Try PNG first for lossless quality, fallback to original format
+          // Always convert to PNG for lossless quality
           let finalBlob = blob;
-          let format = blob.type.includes('png') ? 'PNG' : 'JPEG';
+          let format = 'PNG';
           
-          // Convert to PNG if it's JPEG and we want lossless quality
-          if (blob.type.includes('jpeg') && blob.size < 10 * 1024 * 1024) { // Only convert if < 10MB
+          // Convert to PNG if it's not already
+          if (!blob.type.includes('png')) {
             try {
               const canvas = document.createElement('canvas');
               const ctx = canvas.getContext('2d');
@@ -211,9 +211,8 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
                   canvas.height = img.height;
                   ctx?.drawImage(img, 0, 0);
                   canvas.toBlob((pngBlob) => {
-                    if (pngBlob && pngBlob.size < blob.size * 2) { // Only use PNG if reasonable size
+                    if (pngBlob) {
                       finalBlob = pngBlob;
-                      format = 'PNG';
                       console.log(`🎨 Converted to PNG: ${(pngBlob.size / 1024 / 1024).toFixed(2)}MB`);
                     }
                     resolve(null);
@@ -224,6 +223,7 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
               });
             } catch (e) {
               console.log('PNG conversion failed, using original format');
+              format = blob.type.includes('png') ? 'PNG' : 'JPEG';
             }
           }
           
@@ -282,25 +282,18 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
           
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           
-          // Try PNG first, fallback to JPEG
+          // Always use PNG for lossless quality
           let dataUrl: string;
           let format: string;
           let size: number;
           
           try {
-            // Try PNG for lossless quality
+            // Always use PNG for lossless quality
             dataUrl = canvas.toDataURL('image/png');
             format = 'PNG';
             size = Math.round(dataUrl.length * 0.75); // Approximate size
-            
-            // If PNG is too large, use high quality JPEG
-            if (size > 5 * 1024 * 1024) { // > 5MB
-              dataUrl = canvas.toDataURL('image/jpeg', 0.95);
-              format = 'JPEG (95% quality)';
-              size = Math.round(dataUrl.length * 0.75);
-            }
           } catch (e) {
-            // Fallback to JPEG
+            // Fallback to high quality JPEG only if PNG fails
             dataUrl = canvas.toDataURL('image/jpeg', 1.0);
             format = 'JPEG (100% quality)';
             size = Math.round(dataUrl.length * 0.75);

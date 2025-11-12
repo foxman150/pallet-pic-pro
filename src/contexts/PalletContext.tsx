@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { secureSetItem, secureGetItem, secureError, getUserFriendlyError } from '@/lib/security';
+import { photoMemoryManager } from '@/lib/photoMemoryManager';
 
 interface PalletPhoto {
   palletIndex: number;
@@ -153,6 +154,14 @@ export function PalletProvider({ children }: { children: React.ReactNode }) {
       photo => !(photo.palletIndex === palletIndex && photo.sideIndex === sideIndex)
     );
     
+    // Store in memory manager with key
+    const photoKey = `p${palletIndex}_s${sideIndex}`;
+    photoMemoryManager.storePhoto(photoKey, photoUri);
+    
+    // Log memory stats
+    const stats = photoMemoryManager.getStats();
+    console.log(`📊 Photo memory: ${stats.count} photos, ~${stats.estimatedMB}MB`);
+    
     // Add the new photo
     setPhotos([
       ...filteredPhotos,
@@ -161,6 +170,9 @@ export function PalletProvider({ children }: { children: React.ReactNode }) {
   };
 
   const resetData = () => {
+    // Clean up memory before resetting
+    photoMemoryManager.clearAll();
+    
     setTotalPallets(0);
     setPhotos([]);
     setCustomerName('');
@@ -204,6 +216,9 @@ export function PalletProvider({ children }: { children: React.ReactNode }) {
       const updatedSessions = localSessions.filter(session => session.id !== sessionId);
       setLocalSessions(updatedSessions);
       secureSetItem(LOCAL_SESSIONS_KEY, updatedSessions);
+      
+      // Trigger memory cleanup after deletion
+      photoMemoryManager.forceCleanup();
     } catch (error) {
       secureError('Error deleting local session', error);
     }
@@ -240,7 +255,13 @@ export function PalletProvider({ children }: { children: React.ReactNode }) {
       // 2. Upload each photo to storage and create records
       for (const photo of photos) {
         const { palletIndex, sideIndex, photoUri } = photo;
-        const fileName = `${sessionId}/${palletIndex}_${sideIndex}.jpg`;
+        
+        // Detect format from data URL or use PNG as default
+        const isPNG = photoUri.includes('data:image/png');
+        const extension = isPNG ? 'png' : 'jpg';
+        const contentType = isPNG ? 'image/png' : 'image/jpeg';
+        
+        const fileName = `${sessionId}/${palletIndex}_${sideIndex}.${extension}`;
         
         // Convert data URI to Blob
         const response = await fetch(photoUri);
@@ -250,7 +271,7 @@ export function PalletProvider({ children }: { children: React.ReactNode }) {
         const { error: uploadError } = await supabase.storage
           .from('pallet_photos')
           .upload(fileName, blob, {
-            contentType: 'image/jpeg'
+            contentType: contentType
           });
         
         if (uploadError) {
@@ -277,6 +298,9 @@ export function PalletProvider({ children }: { children: React.ReactNode }) {
           secureError('Error creating photo record', photoError);
         }
       }
+      
+      // Clean up memory after successful upload
+      photoMemoryManager.forceCleanup();
       
       return true;
     } catch (error) {
