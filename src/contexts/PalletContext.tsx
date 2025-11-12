@@ -240,7 +240,7 @@ export function PalletProvider({ children }: { children: React.ReactNode }) {
       // 2. Upload each photo to storage and create records
       for (const photo of photos) {
         const { palletIndex, sideIndex, photoUri } = photo;
-        const fileName = `${sessionId}/${palletIndex}_${sideIndex}.jpg`;
+        const fileName = `${sessionId}/${palletIndex}_${sideIndex}.png`;
         
         // Convert data URI to Blob
         const response = await fetch(photoUri);
@@ -250,7 +250,7 @@ export function PalletProvider({ children }: { children: React.ReactNode }) {
         const { error: uploadError } = await supabase.storage
           .from('pallet_photos')
           .upload(fileName, blob, {
-            contentType: 'image/jpeg'
+            contentType: 'image/png'
           });
         
         if (uploadError) {
