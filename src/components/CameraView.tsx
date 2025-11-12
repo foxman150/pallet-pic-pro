@@ -9,7 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useIsMobile, useDeviceOrientation } from '@/hooks/use-mobile';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { processImage } from '@/lib/imageProcessing';
-import { upscaleImage, isUpscalingSupported } from '@/lib/aiUpscaling';
+// Lazy import AI upscaling utilities when needed
 
 interface CameraViewProps {
   onPhotoTaken: (uri: string) => void;
@@ -31,9 +31,19 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const orientation = useDeviceOrientation();
-  const supportsAI = isUpscalingSupported();
+  const [supportsAI, setSupportsAI] = useState<boolean>(false);
 
-  // Auto-open camera on mount and when moving to next side/pallet
+  // Check AI support lazily to avoid pulling heavy libs on first load
+  useEffect(() => {
+    let mounted = true;
+    import('@/lib/aiUpscaling')
+      .then((mod) => {
+        if (mounted) setSupportsAI(mod.isUpscalingSupported());
+      })
+      .catch(() => setSupportsAI(false));
+    return () => { mounted = false; };
+  }, []);
+
   useEffect(() => {
     if (!photoTaken) {
       takePhoto();
@@ -84,6 +94,7 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
           });
 
           try {
+            const { upscaleImage } = await import('@/lib/aiUpscaling');
             finalPhotoUri = await upscaleImage(photo.dataUrl!, 2, (progress) => {
               setAiProgress(progress);
             });

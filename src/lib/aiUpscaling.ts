@@ -3,16 +3,15 @@
  * Increases image resolution by 2-4x for better barcode/text readability
  */
 
-import Upscaler from 'upscaler';
+// Dynamic import Upscaler only when needed to avoid heavy initial payload
+// import Upscaler from 'upscaler';
 
-let upscalerInstance: InstanceType<typeof Upscaler> | null = null;
+let upscalerInstance: any | null = null;
 
-/**
- * Initialize the AI upscaler (lazy loading)
- */
-async function getUpscaler(): Promise<InstanceType<typeof Upscaler>> {
+async function getUpscaler(): Promise<any> {
   if (!upscalerInstance) {
     console.log('🤖 Initializing AI upscaler...');
+    const { default: Upscaler } = await import('upscaler');
     upscalerInstance = new Upscaler({
       model: {
         path: 'https://cdn.jsdelivr.net/npm/@upscalerjs/default-model@latest/models/default/x2.json',
