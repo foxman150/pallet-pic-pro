@@ -26,10 +26,12 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
   const isMobile = useIsMobile();
   const orientation = useDeviceOrientation();
 
-  // Auto-open camera on mount
+  // Auto-open camera on mount and when moving to next side/pallet
   useEffect(() => {
-    takePhoto();
-  }, []);
+    if (!photoTaken) {
+      takePhoto();
+    }
+  }, [currentPallet, currentSide]);
 
   const takePhoto = async () => {
     try {
@@ -141,12 +143,7 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
   const confirmPhoto = () => {
     if (photoUri) {
       onPhotoTaken(photoUri);
-      setPhotoTaken(false);
-      setPhotoUri('');
-      setPhotoResolution('');
-      setCaptureMethod('');
-      setPhotoFormat('');
-      setPhotoSize(0);
+      // Don't reset state here - let the component unmount/remount for next photo
     }
   };
 
