@@ -62,43 +62,23 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
         setPhotoResolution(resolution);
         console.log(`📊 Original photo: ${resolution}`);
 
-        // Apply post-processing filters
-        setIsProcessing(true);
+        // Use raw camera output for maximum quality (Phase 1: No destructive filters)
+        // This preserves Apple's Deep Fusion, Smart HDR, and native computational photography
+        console.log('📸 Using raw camera output for maximum barcode quality');
+        
+        const originalSize = Math.round(photo.dataUrl!.length * 0.75);
+        setPhotoFormat('JPEG (Raw Camera)');
+        setPhotoSize(originalSize);
+        setPhotoUri(photo.dataUrl!);
+        setPhotoTaken(true);
+
+        console.log(`✅ Raw photo ready: ${(originalSize / 1024 / 1024).toFixed(2)}MB`);
+        
         toast({
-          title: "Processing Photo",
-          description: "Applying enhancement filters...",
+          title: "Photo Captured",
+          description: "Maximum quality preserved for barcode reading",
           duration: 2000,
         });
-
-        try {
-          const processedDataUrl = await processImage(photo.dataUrl!, {
-            denoise: true,
-            sharpen: true,
-            enhance: true,
-          });
-
-          const processedSize = Math.round(processedDataUrl.length * 0.75);
-          setPhotoFormat('PNG (Enhanced)');
-          setPhotoSize(processedSize);
-          setPhotoUri(processedDataUrl);
-          setPhotoTaken(true);
-
-          console.log(`✅ Processing complete: ${(processedSize / 1024 / 1024).toFixed(2)}MB`);
-          
-          toast({
-            title: "Photo Enhanced",
-            description: "Noise reduction, sharpening, and enhancement applied",
-            duration: 2000,
-          });
-        } catch (error) {
-          console.error('Processing error, using original:', error);
-          // Fallback to original if processing fails
-          const originalSize = Math.round(photo.dataUrl!.length * 0.75);
-          setPhotoFormat('JPEG (Original)');
-          setPhotoSize(originalSize);
-          setPhotoUri(photo.dataUrl!);
-          setPhotoTaken(true);
-        }
 
         setIsProcessing(false);
       };
@@ -208,14 +188,14 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
               <div className="absolute top-2 left-2 bg-black/80 text-white text-xs rounded-lg px-3 py-2 space-y-1 backdrop-blur-sm">
                 <div className="font-semibold flex items-center gap-1">
                   <Sparkles className="h-3 w-3" />
-                  Enhanced Photo
+                  Maximum Quality
                 </div>
                 <div>Resolution: {photoResolution}</div>
                 <div>Format: {photoFormat}</div>
                 <div>Size: {(photoSize / 1024 / 1024).toFixed(2)}MB</div>
                 <div className="text-green-400 text-[10px]">✓ Deep Fusion + Smart HDR</div>
-                <div className="text-blue-400 text-[10px]">✓ Noise Reduction Applied</div>
-                <div className="text-purple-400 text-[10px]">✓ Sharpened + Enhanced</div>
+                <div className="text-blue-400 text-[10px]">✓ Raw Camera Output</div>
+                <div className="text-purple-400 text-[10px]">✓ Optimized for Barcodes</div>
               </div>
             )}
           </>
