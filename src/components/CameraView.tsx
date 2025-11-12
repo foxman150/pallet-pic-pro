@@ -83,8 +83,8 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
         let finalFormat = 'JPEG (Raw Camera)';
         let enhancedWithAI = false;
 
-        // Apply AI enhancement if enabled
-        if (aiEnhanceEnabled && supportsAI) {
+        // Apply AI enhancement (always enabled)
+        if (aiEnhanceEnabled) {
           setIsProcessing(true);
           setAiProgress(0);
           toast({
@@ -100,6 +100,7 @@ const CameraView: React.FC<CameraViewProps> = ({ onPhotoTaken }) => {
             });
             finalFormat = 'PNG (AI Enhanced 2x)';
             enhancedWithAI = true;
+            console.log('✅ AI enhancement complete');
             
             toast({
               title: "AI Enhancement Complete",
